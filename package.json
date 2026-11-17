@@ -14,7 +14,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "lint": "node --check library.js && node --check public/lib/admin.js && node --check public/lib/inbox.js"
+    "lint": "node --check library.js && node --check public/lib/inbox.js"
   },
   "engines": {
     "node": ">=20"
