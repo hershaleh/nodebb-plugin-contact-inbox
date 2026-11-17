@@ -384,5 +384,6 @@ module.exports = {
   init,
   addRoutes,
   addAdminNavigation,
+  addNavigation,
   _test: { clean, validEmail },
 };
