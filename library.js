@@ -275,20 +275,21 @@ async function init({ router }) {
 }
 
 async function addRoutes({ router, middleware }) {
-  const publicMw = [];
+  const publicMw = [middleware.applyCSRF];
   const staffMw = [staffOnly];
+  const staffWriteMw = [staffOnly, middleware.applyCSRF];
   const adminMw = [staffOnly];
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions', publicMw, submit);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/submissions', staffMw, list);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/submissions/:id', staffMw, detail);
-  routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/submissions/:id', staffMw, update);
-  routeHelpers.setupApiRoute(router, 'delete', '/contact-inbox/submissions/:id', staffMw, remove);
-  routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/replies', staffMw, reply);
+  routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/submissions/:id', staffWriteMw, update);
+  routeHelpers.setupApiRoute(router, 'delete', '/contact-inbox/submissions/:id', staffWriteMw, remove);
+  routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/replies', staffWriteMw, reply);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/unread', staffMw, unread);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/preferences', staffMw, getStaffPrefs);
-  routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/preferences', staffMw, saveStaffPrefs);
+  routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/preferences', staffWriteMw, saveStaffPrefs);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/settings', adminMw, getSettings);
-  routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/settings', adminMw, saveSettings);
+  routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/settings', [staffOnly, middleware.applyCSRF], saveSettings);
 }
 
 async function addAdminNavigation(header) {
