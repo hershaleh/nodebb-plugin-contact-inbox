@@ -73,7 +73,7 @@ async function all() {
   const kept = [];
   for (const item of values) {
     if (!item || item.deletedAt) continue;
-    if (cutoff && item.createdAt < cutoff) {
+    if (cutoff && item.status === 'resolved' && (item.updatedAt || item.createdAt) < cutoff) {
       await db.delete(key(item.id));
       await db.sortedSetRemove(PREFIX + 'submissions', item.id);
     } else {
@@ -84,7 +84,7 @@ async function all() {
 }
 
 async function countUnread() {
-  return (await all()).filter(item => !item.readAt).length;
+  return (await all()).filter(item => item.status !== 'resolved').length;
 }
 
 async function notifyStaff(submission) {
