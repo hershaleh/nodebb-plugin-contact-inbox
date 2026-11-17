@@ -129,7 +129,7 @@
       const instance = window.bootstrap.Modal.getInstance(wrap);
       if (instance) { instance.hide(); return; }
     }
-    if ($ && $.fn && $.fn.modal) { closeModal(wrap); return; }
+    if ($ && $.fn && $.fn.modal) { $(wrap).modal('hide'); return; }
     wrap.remove();
   }
 
@@ -144,7 +144,7 @@
     const count = document.getElementById('ci-count');
     const historyButton = document.getElementById('ci-history-button');
     const settingsButton = document.getElementById('ci-settings-button');
-    const routePath = (window.location.pathname || '').replace(/\\/+$/, '');
+    const routePath = (window.location.pathname || '').replace(/\/+$/, '');
     const isSettingsPage = routePath.endsWith('/settings');
     let view = routePath.endsWith('/history') ? 'history' : 'active', activeId = null, settings = null, isAdmin = false;
 
