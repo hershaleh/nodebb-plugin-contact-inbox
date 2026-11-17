@@ -11,13 +11,19 @@ const DEFAULTS = Object.freeze({
   emailNotifications: false,
   emailReplies: false,
 });
-let db, user, groups, meta, routeHelpers, emailer, retentionTimer;
+let db, user, groups, meta, routeHelpers, apiHelpers, emailer, retentionTimer;
 
 const clean = (value, max) => String(value == null ? '' : value).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 const validEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const id = () => crypto.randomBytes(16).toString('hex');
 const key = submissionId => PREFIX + 'submission:' + submissionId;
-const send = (res, status, data) => res.status(status).json(data);
+const send = (res, status, data) => {
+  if (apiHelpers && typeof apiHelpers.formatApiResponse === 'function') {
+    if (status >= 400) return apiHelpers.formatApiResponse(status, res, new Error(data.error || '[[error:invalid-data]]'));
+    return apiHelpers.formatApiResponse(status, res, data);
+  }
+  return res.status(status).json(data);
+};
 
 async function config() {
   const saved = await meta.settings.get(ID) || {};
@@ -276,7 +282,8 @@ async function init({ router }) {
   routeHelpers.setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], adminPage);
 }
 
-async function addRoutes({ router, middleware }) {
+async function addRoutes({ router, middleware, helpers }) {
+  apiHelpers = helpers;
   routeHelpers = routeHelpers || require.main.require('./src/routes/helpers');
   const publicMw = [middleware.applyCSRF];
   const staffMw = [staffOnly];
