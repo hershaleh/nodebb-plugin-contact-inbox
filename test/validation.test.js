@@ -57,17 +57,24 @@ test('API routes enforce CSRF on writes and use standard NodeBB response formatt
   assert.ok(server.includes("'/contact-inbox/submissions/:id/chat'"));
 });
 
-test('front-end inbox has its own public-facing template and RTL responsive layout', () => {
+test('front-end inbox uses LTR source values so NodeBB RTL processing outputs RTL', () => {
   const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin.json'), 'utf8'));
   const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
-  const css = fs.readFileSync(path.join(root, 'public/lib/inbox.scss'), 'utf8');
+  const scss = fs.readFileSync(path.join(root, 'public/lib/inbox.scss'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'public/lib/inbox.css'), 'utf8');
+
   assert.ok(server.includes("res.render('contact-inbox'"));
   assert.ok(server.includes("setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], forumPage)"));
   assert.ok(manifest.scripts.includes('public/lib/inbox.js'));
   assert.ok(template.includes('dir="rtl"'));
-  assert.ok(css.includes('grid-template-columns:minmax(0,360px) minmax(0,1fr)'));
-  assert.ok(css.includes('@media(max-width:760px)'));
+  assert.match(scss, /\.contact-inbox-page\{direction:ltr;/);
+  assert.match(scss, /\.contact-inbox-page\{[^}]*text-align:left;/);
+  assert.match(scss, /\.ci-row\{[^}]*text-align:left;/);
+  assert.doesNotMatch(scss, /direction:rtl|text-align:right/);
+  assert.equal(css, scss);
+  assert.ok(scss.includes('grid-template-columns:minmax(0,360px) minmax(0,1fr)'));
+  assert.ok(scss.includes('@media(max-width:760px)'));
 });
 
 test('shared unread badge uses the global unread count returned by the API', () => {
