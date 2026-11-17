@@ -112,8 +112,9 @@ async function submit(req, res) {
       return send(res, 400, { error: 'יש למלא שם, כתובת דוא״ל תקינה, נושא ותוכן פנייה.' });
     }
     const uid = username ? Number(await user.getUidByUsername(username)) || 0 : 0;
+    const userslug = uid ? await user.getUserField(uid, 'userslug') : '';
     const item = {
-      id: id(), name, email, subject, message, username, uid,
+      id: id(), name, email, subject, message, username, uid, userslug,
       createdAt: Date.now(), readAt: 0, readBy: 0,
       status: 'new', replies: [], deletedAt: 0,
     };
@@ -253,7 +254,7 @@ async function init({ router }) {
   meta = require.main.require('./src/meta');
   emailer = require.main.require('./src/emailer');
   routeHelpers = require.main.require('./src/routes/helpers');
-  routeHelpers.setupAdminPageRoute(router, '/admin/plugins/contact-inbox', staffOnly, adminPage);
+  routeHelpers.setupAdminPageRoute(router, '/admin/plugins/contact-inbox', [staffOnly], adminPage);\n  routeHelpers.setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], adminPage);
 }
 
 async function addRoutes({ router, middleware }) {
