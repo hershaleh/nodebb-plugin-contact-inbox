@@ -133,14 +133,18 @@
         });
         const textarea = el('textarea', 'form-control');
         textarea.rows = 4; textarea.placeholder = 'כתיבת תשובה פנימית…';
+        const emailLabel = el('label', 'ci-email-reply-option');
+        const emailCheck = el('input');
+        emailCheck.type = 'checkbox';
+        emailLabel.append(emailCheck, document.createTextNode(' שליחת התשובה גם לכתובת הדוא״ל של הפונה (אם האפשרות הופעלה בהגדרות)'));
         const replyButton = el('button', 'btn btn-primary', 'שמירת תשובה בהיסטוריה');
         replyButton.addEventListener('click', async () => {
           try {
-            await request('/submissions/' + encodeURIComponent(id) + '/replies', { method: 'POST', body: JSON.stringify({ message: textarea.value, sendEmail: false }) });
+            await request('/submissions/' + encodeURIComponent(id) + '/replies', { method: 'POST', body: JSON.stringify({ message: textarea.value, sendEmail: emailCheck.checked }) });
             await openItem(id);
           } catch (err) { window.alert(err.message); }
         });
-        history.append(textarea, replyButton);
+        history.append(textarea, emailLabel, replyButton);
         detail.append(history);
         const remove = el('button', 'btn btn-danger', 'מחיקת הפנייה');
         remove.addEventListener('click', async () => {
