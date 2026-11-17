@@ -289,6 +289,10 @@ async function adminPage(req, res) {
   res.render('admin/plugins/contact-inbox', { title: 'תיבת פניות' });
 }
 
+async function forumPage(req, res) {
+  res.render('contact-inbox', { title: 'תיבת פניות' });
+}
+
 async function init({ router }) {
   db = require.main.require('./src/database');
   user = require.main.require('./src/user');
@@ -302,7 +306,7 @@ async function init({ router }) {
   retentionTimer = setInterval(runRetention, 60 * 60 * 1000);
   if (typeof retentionTimer.unref === 'function') retentionTimer.unref();
   routeHelpers.setupAdminPageRoute(router, '/admin/plugins/contact-inbox', [staffOnly], adminPage);
-  routeHelpers.setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], adminPage);
+  routeHelpers.setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], forumPage);
 }
 
 async function addRoutes({ router, middleware, helpers }) {
