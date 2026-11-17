@@ -6,13 +6,13 @@
   "library": "./library.js",
   "hooks": [
     { "hook": "static:app.load", "method": "init" },
-    { "hook": "filter:admin.header.build", "method": "addAdminNavigation" },
-    { "hook": "filter:router.page", "method": "addRoutes" },
-    { "hook": "filter:plugin.getNavigation", "method": "addNavigation" }
+    { "hook": "filter:router.build", "method": "addRoutes" }
   ],
   "scripts": [
-    "public/lib/inbox.js",
-    "public/lib/admin.js"
+    "public/lib/inbox.js"
+  ],
+  "styles": [
+    "public/lib/inbox.css"
   ],
   "staticDirs": {
     "public": "./public"
