@@ -198,7 +198,7 @@ async function reply(req, res) {
   const cfg = await config();
   const sendEmail = req.body?.sendEmail === true;
   if (sendEmail) {
-    if (!cfg.emailReplies || !meta.config['email:smtpTransport:enabled']) {
+    if (!cfg.emailReplies || !meta.config['email:smtpTransport:enabled'] || !meta.config['email:from']) {
       return send(res, 409, { error: 'יש להפעיל תחילה שליחת תשובות ולהגדיר SMTP בהגדרות הדוא״ל של NodeBB.' });
     }
     try {
@@ -252,14 +252,14 @@ async function saveSettings(req, res) {
     retentionDays,
     maxPerHour,
     emailNotifications: body.emailNotifications === true,
-    emailReplies: body.emailReplies === true && !!meta.config['email:smtpTransport:enabled'],
+    emailReplies: body.emailReplies === true && !!meta.config['email:smtpTransport:enabled'] && !!meta.config['email:from'],
   });
   return send(res, 200, { success: true });
 }
 
 async function getSettings(req, res) {
   if (!(await user.isAdministrator(req.uid))) return send(res, 403, { error: 'רק מנהל ראשי יכול לצפות בהגדרות' });
-  return send(res, 200, { settings: await config(), smtpConfigured: !!meta.config['email:smtpTransport:enabled'] });
+  return send(res, 200, { settings: await config(), smtpConfigured: !!meta.config['email:smtpTransport:enabled'] && !!meta.config['email:from'] });
 }
 
 async function adminPage(req, res) {
