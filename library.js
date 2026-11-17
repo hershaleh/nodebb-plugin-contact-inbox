@@ -292,6 +292,11 @@ async function getSettings(req, res) {
   return send(res, 200, { settings: await config(), smtpConfigured: mailConfigured() });
 }
 
+async function getCapabilities(req, res) {
+  const cfg = await config();
+  return send(res, 200, { emailReplies: !!cfg.emailReplies, smtpConfigured: mailConfigured(), isAdmin: await user.isAdministrator(req.uid) });
+}
+
 async function adminPage(req, res) {
   res.render('admin/plugins/contact-inbox', { title: 'תיבת פניות' });
 }
@@ -335,6 +340,7 @@ async function addRoutes({ router, middleware, helpers }) {
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/preferences', staffMw, getStaffPrefs);
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/preferences', staffWriteMw, saveStaffPrefs);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/settings', adminMw, getSettings);
+  routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/capabilities', staffMw, getCapabilities);
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/settings', [staffOnly, middleware.applyCSRF], saveSettings);
 }
 
