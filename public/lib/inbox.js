@@ -13,8 +13,9 @@
     const token = document.querySelector('meta[name="csrf-token"]');
     if (token && opts.method && opts.method !== 'GET') opts.headers['x-csrf-token'] = token.content;
     const response = await fetch(API + path, opts);
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'הפעולה נכשלה');
+    const raw = await response.json().catch(() => ({}));
+    const data = raw && raw.response && typeof raw.response === 'object' ? raw.response : raw;
+    if (!response.ok) throw new Error(data.error || raw.error || (raw.status && raw.status.message) || 'הפעולה נכשלה');
     return data;
   }
 
