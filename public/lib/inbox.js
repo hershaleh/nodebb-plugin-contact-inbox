@@ -46,6 +46,11 @@
     if (!item) return;
     const link = item.querySelector('a');
     if (!link) return;
+    const chatAnchor = document.querySelector('#chat-list, a[href*="/chats"], a[href*="/chat"]');
+    const chatItem = chatAnchor && (chatAnchor.closest('li') || chatAnchor);
+    if (chatItem && chatItem.parentNode && chatItem.parentNode === item.parentNode && chatItem.nextSibling !== item) {
+      chatItem.parentNode.insertBefore(item, chatItem.nextSibling);
+    }
     let badge = link.querySelector('.ci-nav-badge');
     if (!badge) {
       badge = document.createElement('span');
