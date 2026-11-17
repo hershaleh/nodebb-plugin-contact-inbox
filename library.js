@@ -278,6 +278,7 @@ async function init({ router }) {
 }
 
 async function addRoutes({ router, middleware }) {
+  routeHelpers = routeHelpers || require.main.require('./src/routes/helpers');
   const publicMw = [middleware.applyCSRF];
   const staffMw = [staffOnly];
   const staffWriteMw = [staffOnly, middleware.applyCSRF];
