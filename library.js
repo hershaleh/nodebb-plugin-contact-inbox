@@ -178,9 +178,8 @@ async function update(req, res) {
 async function remove(req, res) {
   const item = await get(req.params.id);
   if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
-  item.deletedAt = Date.now();
-  item.deletedBy = Number(req.uid);
-  await db.setObject(key(item.id), item);
+  // A manual delete is permanent: remove the submission and its reply history.
+  await db.delete(key(item.id));
   await db.sortedSetRemove(PREFIX + 'submissions', item.id);
   return send(res, 200, { success: true });
 }
