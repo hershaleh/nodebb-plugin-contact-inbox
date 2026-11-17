@@ -41,40 +41,39 @@
     return data;
   }
 
-  function addTopbarIcon() {
-    const nav = document.querySelector('#main-nav .navbar-nav, #header .navbar-nav, .navbar .navbar-nav, [component="navbar"] .navbar-nav');
-    if (!nav || document.getElementById('contact-inbox-nav')) return;
-    const li = document.createElement('li');
-    li.id = 'contact-inbox-nav';
-    li.className = 'contact-inbox-nav';
-    li.innerHTML = '<a href="' + page + '" title="תיבת פניות" aria-label="תיבת פניות"><i class="fa fa-envelope" aria-hidden="true"></i><span class="ci-nav-badge" hidden></span></a>';
-    const anchor = nav.querySelector('#chat-list, #notifications, a[href*="/chats"], a[href*="/notifications"]');
-    const target = anchor && (anchor.closest('li') || anchor);
-    if (target && target.parentNode === nav) nav.insertBefore(li, target.nextSibling); else nav.appendChild(li);
-    async function refresh() {
-      try {
-        const result = await request('/unread');
-        const count = Number(result.count) || 0;
-        const badge = li.querySelector('.ci-nav-badge');
-        badge.textContent = count > 99 ? '99+' : String(count);
-        badge.hidden = count === 0;
-        li.hidden = false;
-      } catch (err) {
-        if (/403|forbidden|הרשאה|401/i.test(err.message)) li.remove();
-      }
+  async function refreshNavigationIcon() {
+    const item = document.getElementById('contact-inbox-nav');
+    if (!item) return;
+    const link = item.querySelector('a');
+    if (!link) return;
+    let badge = link.querySelector('.ci-nav-badge');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'ci-nav-badge';
+      badge.hidden = true;
+      link.appendChild(badge);
     }
-    refresh();
-    window.addEventListener('contact-inbox:refresh-unread', refresh);
-    if (!window.__ciUnreadTimer) window.__ciUnreadTimer = window.setInterval(refresh, 30000);
+    try {
+      const result = await request('/unread');
+      const count = Number(result.count) || 0;
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.hidden = count === 0;
+      item.hidden = false;
+    } catch (err) {
+      if (/403|forbidden|הרשאה|401/i.test(err.message)) item.hidden = true;
+    }
   }
 
   async function notify(message, type) {
     try {
-      if (window.app && typeof window.app.require === 'function') {
-        const alerts = await window.app.require('alerts');
+      if (typeof window.require === 'function') {
+        const alerts = await new Promise((resolve, reject) => {
+          window.require(['alerts'], resolve, reject);
+        });
         if (type === 'success' && typeof alerts.success === 'function') return alerts.success(message);
         if ((type === 'danger' || type === 'error') && typeof alerts.error === 'function') return alerts.error(message);
-        if (typeof alerts.alert === 'function') return alerts.alert({ title: 'תיבת פניות', message, type: type === 'danger' ? 'error' : (type || 'info'), timeout: 5000 });
+        if (type === 'warning' && typeof alerts.warning === 'function') return alerts.warning(message);
+        if (typeof alerts.info === 'function') return alerts.info(message);
       }
     } catch (err) {
       // Fall back to a local toast if the NodeBB alerts module is unavailable.
@@ -257,7 +256,7 @@
             done.disabled = true;
             try {
               await request('/submissions/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify({ status: 'resolved' }) });
-              activeId = null; detail.replaceChildren(el('p', 'ci-empty', 'הפנייה הועברה להיסטוריה.')); await load();
+              activeId = null; detail.replaceChildren(el('p', 'ci-empty', 'הפנייה הועברה להיסטוריה.')); await load(); await notify('הפנייה סומנה כטופלה והועברה להיסטוריה.', 'success');
               window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
             } catch (err) { notify(err.message, 'danger'); done.disabled = false; }
           });
@@ -272,8 +271,8 @@
             { label: 'מחיקה לצמיתות', className: 'btn-danger', onClick: async (wrap, button) => {
               button.disabled = true;
               try {
-                await request('/submissions/' + encodeURIComponent(id), { method: 'DELETE' });
-                closeModal(wrap); activeId = null; detail.replaceChildren(el('p', 'ci-empty', 'הפנייה נמחקה.')); await load();
+                await request('/submissions/' + encodeURIComponent(id) + '/delete', { method: 'POST', body: '{}' });
+                closeModal(wrap); activeId = null; detail.replaceChildren(el('p', 'ci-empty', 'הפנייה נמחקה.')); await load(); await notify('הפנייה נמחקה בהצלחה.', 'success');
                 window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
               } catch (err) { notify(err.message, 'danger'); button.disabled = false; }
             }}
@@ -366,7 +365,7 @@
         { label: 'ביטול', className: 'btn-default' },
         { label: 'מחיקת כל ההיסטוריה', className: 'btn-danger', onClick: async (wrap, button) => {
           button.disabled = true;
-          try { const result = await request('/history', { method: 'DELETE', body: '{}' }); closeModal(wrap); notify('נמחקו ' + result.deleted + ' פניות מההיסטוריה.', 'success'); await load(); }
+          try { const result = await request('/history/clear', { method: 'POST', body: '{}' }); closeModal(wrap); notify('נמחקו ' + result.deleted + ' פניות מההיסטוריה.', 'success'); await load(); window.dispatchEvent(new Event('contact-inbox:refresh-unread')); }
           catch (err) { notify(err.message, 'danger'); button.disabled = false; }
         }}
       ]);
@@ -382,7 +381,7 @@
           retentionDays: Number(document.getElementById('ci-retention').value),
           emailNotifications: !!settings.emailNotifications, emailReplies: !!settings.emailReplies
         }) });
-        msg.textContent = 'מדיניות השמירה נשמרה.';
+        msg.textContent = 'מדיניות השמירה נשמרה.'; await notify('מדיניות שמירת ההיסטוריה נשמרה.', 'success');
       } catch (err) { msg.textContent = err.message; }
     });
     if (isSettingsPage) {
@@ -401,9 +400,11 @@
     }
   }
 
-  function start() { addTopbarIcon(); initInbox(); }
+  function start() { refreshNavigationIcon(); initInbox(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
   if ($) $(window).on('action:ajaxify.end', start);
-  const observer = new MutationObserver(() => { if (!document.getElementById('contact-inbox-nav')) addTopbarIcon(); });
+  window.addEventListener('contact-inbox:refresh-unread', refreshNavigationIcon);
+  if (!window.__ciNavRefreshTimer) window.__ciNavRefreshTimer = window.setInterval(refreshNavigationIcon, 30000);
+  const observer = new MutationObserver(() => { if (document.getElementById('contact-inbox-nav')) refreshNavigationIcon(); });
   if (document.documentElement) observer.observe(document.documentElement, { childList: true, subtree: true });
 }());
