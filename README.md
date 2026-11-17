@@ -4,7 +4,7 @@
 
 ## יכולות
 
-- API ציבורי לקבלת פניות אנונימיות: שם, דוא״ל, נושא, הודעה ושם משתמש אופציונלי.
+- API ציבורי לקבלת פניות אנונימיות: שם, דוא״ל, נושא והודעה.
 - תיבת פניות פרטית בכתובת `/plugins/contact-inbox`.
 - סמל מעטפה בסרגל הניווט עם מספר הפניות שטרם נפתחו, המוצג רק למורשים.
 - ברירת מחדל: קבוצת `administrators`; מנהל יכול להוסיף קבוצות נוספות לפי שם הקבוצה.
@@ -43,13 +43,13 @@ const response = await fetch('/api/v3/plugins/contact-inbox/submissions', {
     'Content-Type': 'application/json',
     ...(token ? { 'x-csrf-token': token } : {}),
   },
-  body: JSON.stringify({ name, email, subject, message, username }),
+  body: JSON.stringify({ name, email, subject, message }),
 });
 const result = await response.json();
 if (!response.ok) throw new Error(result.error || 'שליחת הפנייה נכשלה');
 ```
 
-השדות הנדרשים: `name`, `email`, `subject`, `message`. השדה `username` אופציונלי.
+השדות הנדרשים: `name`, `email`, `subject`, `message`. אם הפונה מחובר לפורום, התוסף משייך את הפנייה אוטומטית לחשבון המאומת שלו. שדה username שנשלח מטופס ציבורי אינו מהימן ולא יוצר קישור לצ'אט, כדי למנוע התחזות.
 
 ## הגדרות
 
