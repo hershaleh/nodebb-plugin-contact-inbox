@@ -77,9 +77,26 @@ test('front-end inbox uses LTR source values so NodeBB RTL processing outputs RT
   assert.ok(scss.includes('@media(max-width:760px)'));
 });
 
-test('shared unread badge uses the global unread count returned by the API', () => {
+test('inbox separates active submissions from resolved history without read-state transitions', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
-  assert.ok(client.includes("unreadCount = Number(data.unreadCount) || 0"));
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  assert.ok(client.includes("view = 'active'"));
+  assert.ok(client.includes("view === 'history'"));
   assert.ok(client.includes("request('/unread')"));
-  assert.ok(client.includes("className = 'contact-inbox-nav'"));
+  assert.ok(client.includes("li.className = 'contact-inbox-nav'"));
+  assert.ok(server.includes("view === 'history' ? item.status === 'resolved' : item.status !== 'resolved'"));
+  assert.ok(server.includes("item.status !== 'resolved').length"));
+  assert.ok(server.includes("'/contact-inbox/history'"));
+  assert.ok(!server.includes('item.readAt = Date.now()'));
+});
+
+test('inbox uses in-forum modal dialogs and disables unavailable actions', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
+  assert.ok(client.includes("className = 'modal fade ci-modal'"));
+  assert.ok(client.includes("chat.disabled = !item.uid || !item.username"));
+  assert.ok(client.includes("email.disabled = !settings || !settings.emailReplies || !settings.smtpConfigured"));
+  assert.ok(template.includes('ci-history-button'));
+  assert.ok(template.includes('ci-settings-button'));
+  assert.ok(template.includes('ci-history-clear'));
 });
