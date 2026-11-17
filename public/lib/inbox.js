@@ -96,7 +96,7 @@
     const wrap = document.createElement('div');
     wrap.className = 'modal fade ci-modal';
     wrap.tabIndex = -1;
-    wrap.innerHTML = '<div class="modal-dialog"><div class="modal-content"><div class="modal-header"><button type="button" class="close" data-dismiss="modal" aria-label="סגירה"><span aria-hidden="true">&times;</span></button><h4 class="modal-title"></h4></div><div class="modal-body"></div><div class="modal-footer"></div></div></div>';
+    wrap.innerHTML = '<div class="modal-dialog"><div class="modal-content"><div class="modal-header"><button type="button" class="close" data-dismiss="modal" data-bs-dismiss="modal" aria-label="סגירה"><span aria-hidden="true">&times;</span></button><h4 class="modal-title"></h4></div><div class="modal-body"></div><div class="modal-footer"></div></div></div>';
     wrap.querySelector('.modal-title').textContent = title;
     wrap.querySelector('.modal-body').appendChild(bodyNode);
     const footer = wrap.querySelector('.modal-footer');
@@ -242,7 +242,7 @@
               button.disabled = true;
               try {
                 await request('/submissions/' + encodeURIComponent(id) + '/replies', { method: 'POST', body: JSON.stringify({ message: textarea.value, sendEmail: true }) });
-                $(wrap).modal('hide'); await openItem(id); notify('התשובה נשלחה ונשמרה בהיסטוריה.', 'success');
+                closeModal(wrap); await openItem(id); notify('התשובה נשלחה ונשמרה בהיסטוריה.', 'success');
               } catch (err) { notify(err.message, 'danger'); button.disabled = false; }
             }}
           ]);
@@ -271,7 +271,7 @@
               button.disabled = true;
               try {
                 await request('/submissions/' + encodeURIComponent(id), { method: 'DELETE' });
-                $(wrap).modal('hide'); activeId = null; detail.replaceChildren(el('p', 'ci-empty', 'הפנייה נמחקה.')); await load();
+                closeModal(wrap); activeId = null; detail.replaceChildren(el('p', 'ci-empty', 'הפנייה נמחקה.')); await load();
                 window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
               } catch (err) { notify(err.message, 'danger'); button.disabled = false; }
             }}
@@ -311,6 +311,7 @@
       if (!settingsPage) return;
       if (inboxPage) inboxPage.hidden = true;
       settingsPage.hidden = false;
+      root.querySelector('h1').textContent = 'הגדרות תיבת הפניות';
       historyButton.hidden = true;
       settingsButton.hidden = true;
       document.getElementById('ci-back-button').hidden = false;
@@ -363,7 +364,7 @@
         { label: 'ביטול', className: 'btn-default' },
         { label: 'מחיקת כל ההיסטוריה', className: 'btn-danger', onClick: async (wrap, button) => {
           button.disabled = true;
-          try { const result = await request('/history', { method: 'DELETE', body: '{}' }); $(wrap).modal('hide'); notify('נמחקו ' + result.deleted + ' פניות מההיסטוריה.', 'success'); await load(); }
+          try { const result = await request('/history', { method: 'DELETE', body: '{}' }); closeModal(wrap); notify('נמחקו ' + result.deleted + ' פניות מההיסטוריה.', 'success'); await load(); }
           catch (err) { notify(err.message, 'danger'); button.disabled = false; }
         }}
       ]);
