@@ -113,9 +113,22 @@
         detail.append(el('p', '', 'דוא״ל: ' + item.email));
         if (item.username) detail.append(el('p', '', 'משתמש: @' + item.username));
         detail.append(el('article', 'ci-message', item.message));
-        if (item.uid && item.userslug) {
-          const chat = el('a', 'btn btn-default', 'פתיחת צ׳אט עם המשתמש');
-          chat.href = '/user/' + encodeURIComponent(item.userslug) + '/chats';
+        if (item.uid) {
+          const chat = el('button', 'btn btn-default', 'פתיחת צ׳אט עם המשתמש');
+          chat.type = 'button';
+          chat.addEventListener('click', async () => {
+            chat.disabled = true;
+            try {
+              const result = await request('/submissions/' + encodeURIComponent(id) + '/chat', {
+                method: 'POST',
+                body: JSON.stringify({})
+              });
+              window.location.assign(result.url);
+            } catch (err) {
+              window.alert(err.message);
+              chat.disabled = false;
+            }
+          });
           detail.append(chat);
         }
         const controls = el('div', 'ci-controls');
