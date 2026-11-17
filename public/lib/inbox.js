@@ -156,6 +156,48 @@
     document.getElementById('ci-refresh').addEventListener('click', load);
     search.addEventListener('keydown', event => { if (event.key === 'Enter') load(); });
     status.addEventListener('change', load);
+
+    const prefsMessage = document.getElementById('ci-prefs-message');
+    request('/preferences').then(data => {
+      document.getElementById('ci-notify').checked = !!data.preferences.notify;
+      document.getElementById('ci-staff-email').value = data.preferences.email || '';
+    }).catch(err => { prefsMessage.textContent = err.message; });
+    document.getElementById('ci-save-prefs').addEventListener('click', async () => {
+      try {
+        await request('/preferences', { method: 'PUT', body: JSON.stringify({
+          notify: document.getElementById('ci-notify').checked,
+          email: document.getElementById('ci-staff-email').value
+        }) });
+        prefsMessage.textContent = 'ההעדפות נשמרו.';
+      } catch (err) { prefsMessage.textContent = err.message; }
+    });
+
+    const adminSettings = document.getElementById('ci-admin-settings');
+    request('/settings').then(data => {
+      const cfg = data.settings;
+      adminSettings.hidden = false;
+      document.getElementById('ci-groups').value = (cfg.allowedGroups || ['administrators']).join(', ');
+      document.getElementById('ci-retention').value = cfg.retentionDays || 0;
+      document.getElementById('ci-rate').value = cfg.maxPerHour || 5;
+      document.getElementById('ci-email-notifications').checked = !!cfg.emailNotifications;
+      document.getElementById('ci-email-replies').checked = !!cfg.emailReplies;
+      document.getElementById('ci-smtp-note').textContent = data.smtpConfigured
+        ? 'SMTP פעיל לפי הגדרות NodeBB.'
+        : 'SMTP אינו פעיל. שליחת תשובות בדוא״ל תישאר מושבתת עד להגדרת SMTP.';
+    }).catch(() => {});
+    document.getElementById('ci-save-settings').addEventListener('click', async () => {
+      const message = document.getElementById('ci-settings-message');
+      try {
+        await request('/settings', { method: 'PUT', body: JSON.stringify({
+          allowedGroups: document.getElementById('ci-groups').value.split(',').map(v => v.trim()).filter(Boolean),
+          retentionDays: Number(document.getElementById('ci-retention').value),
+          maxPerHour: Number(document.getElementById('ci-rate').value),
+          emailNotifications: document.getElementById('ci-email-notifications').checked,
+          emailReplies: document.getElementById('ci-email-replies').checked
+        }) });
+        message.textContent = 'ההגדרות נשמרו.';
+      } catch (err) { message.textContent = err.message; }
+    });
     load();
   }
 
