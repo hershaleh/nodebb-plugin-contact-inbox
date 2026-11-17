@@ -18,6 +18,5 @@
   "staticDirs": {
     "public": "./public"
   },
-  "templates": "./templates",
-  "languages": "languages"
+  "templates": "./templates"
 }
