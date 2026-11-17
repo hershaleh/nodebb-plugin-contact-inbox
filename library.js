@@ -192,6 +192,19 @@ async function clearHistory(req, res) {
   return send(res, 200, { success: true, deleted: items.length });
 }
 
+async function addNavigation(menu) {
+  const items = Array.isArray(menu) ? menu : [];
+  if (items.some(item => item.id === 'contact-inbox-nav' || item.route === '/plugins/contact-inbox')) return items;
+  return items.concat([{
+    route: '/plugins/contact-inbox',
+    id: 'contact-inbox-nav',
+    title: 'תיבת פניות',
+    iconClass: 'fa-envelope',
+    textClass: 'visible-xs-inline',
+    text: 'תיבת פניות',
+  }]);
+}
+
 async function remove(req, res) {
   const item = await get(req.params.id);
   if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
@@ -347,7 +360,9 @@ async function addRoutes({ router, middleware, helpers }) {
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/submissions/:id', staffMw, detail);
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/submissions/:id', staffWriteMw, update);
   routeHelpers.setupApiRoute(router, 'delete', '/contact-inbox/submissions/:id', staffWriteMw, remove);
+  routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/delete', staffWriteMw, remove);
   routeHelpers.setupApiRoute(router, 'delete', '/contact-inbox/history', staffWriteMw, clearHistory);
+  routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/history/clear', staffWriteMw, clearHistory);
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/replies', staffWriteMw, reply);
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/chat', staffWriteMw, openChat);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/unread', staffMw, unread);
