@@ -20,19 +20,20 @@
   }
 
   function addTopbarIcon() {
-    const nav = document.querySelector('#main-nav .navbar-nav, #header .navbar-nav, .navbar .navbar-nav');
+    const nav = document.querySelector('#main-nav .navbar-nav, #header .navbar-nav, .navbar .navbar-nav, [component="navbar"] .navbar-nav');
     if (!nav || document.getElementById('contact-inbox-nav')) return;
     const item = document.createElement('li');
     item.id = 'contact-inbox-nav';
     item.className = 'contact-inbox-nav';
+    item.hidden = true;
     const link = document.createElement('a');
     link.href = page;
     link.title = 'תיבת פניות';
     link.setAttribute('aria-label', 'תיבת פניות');
-    link.innerHTML = '<i class="fa fa-envelope" aria-hidden="true"></i><span class="ci-nav-badge" hidden></span>';
+    link.innerHTML = '<i class="fa fa-envelope" aria-hidden="true"></i><span class="ci-nav-badge" hidden aria-label="פניות שלא נקראו"></span>';
     item.appendChild(link);
-    const nearby = nav.querySelector('#chat-list, #notifications, [component="chat/list"], [component="notifications"]');
-    const nearbyItem = nearby && nearby.closest('li');
+    const nearby = nav.querySelector('#chat-list, #notifications, [component="chat/list"], [component="notifications"], a[href*="/chats"], a[href*="/notifications"]');
+    const nearbyItem = nearby && (nearby.closest('li') || nearby);
     if (nearbyItem && nearbyItem.parentNode === nav) nav.insertBefore(item, nearbyItem.nextSibling);
     else nav.appendChild(item);
     const badge = link.querySelector('.ci-nav-badge');
@@ -44,13 +45,17 @@
         badge.hidden = count < 1;
         item.hidden = false;
       } catch (err) {
-        if (err.message && !/403|Forbidden|הרשאה/.test(err.message)) console.warn('[contact-inbox]', err.message);
-        item.remove();
+        if (/403|Forbidden|הרשאה|401/.test(err.message || '')) {
+          item.remove();
+          return;
+        }
+        // Keep the icon hidden until permissions have been confirmed by the server.
+        console.warn('[contact-inbox] unread count unavailable:', err.message);
       }
     }
     refresh();
     window.addEventListener('contact-inbox:refresh-unread', refresh);
-    window.setInterval(refresh, 60000);
+    window.setInterval(refresh, 30000);
   }
 
   function initInbox() {
@@ -63,6 +68,7 @@
     const unread = document.getElementById('ci-unread');
     let activeId = null;
     let rows = [];
+    let unreadCount = 0;
 
     function el(tag, cls, value) {
       const node = document.createElement(tag);
@@ -75,7 +81,7 @@
     }
     function renderList() {
       list.replaceChildren();
-      unread.textContent = 'לא נקראו: ' + rows.filter(item => !item.readAt).length;
+      unread.textContent = 'לא נקראו: ' + unreadCount;
       if (!rows.length) {
         list.append(el('p', 'text-muted', 'לא נמצאו פניות.'));
         return;
@@ -98,6 +104,7 @@
         const params = new URLSearchParams({ q: search.value.trim(), status: status.value });
         const data = await request('/submissions?' + params);
         rows = data.submissions || [];
+        unreadCount = Number(data.unreadCount) || 0;
         renderList();
       } catch (err) { list.textContent = err.message; }
     }
