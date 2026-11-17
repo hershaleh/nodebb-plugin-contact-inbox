@@ -193,8 +193,8 @@
       document.getElementById('ci-email-notifications').checked = !!cfg.emailNotifications;
       document.getElementById('ci-email-replies').checked = !!cfg.emailReplies;
       document.getElementById('ci-smtp-note').textContent = data.smtpConfigured
-        ? 'SMTP פעיל לפי הגדרות NodeBB.'
-        : 'SMTP אינו פעיל. שליחת תשובות בדוא״ל תישאר מושבתת עד להגדרת SMTP.';
+        ? 'SMTP וכתובת שולח פעילים לפי הגדרות NodeBB.'
+        : 'SMTP או כתובת השולח אינם מוגדרים. שליחת תשובות בדוא״ל תישאר מושבתת עד להגדרת שניהם.';
     }).catch(() => {});
     document.getElementById('ci-save-settings').addEventListener('click', async () => {
       const message = document.getElementById('ci-settings-message');
