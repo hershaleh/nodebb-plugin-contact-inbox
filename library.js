@@ -155,22 +155,20 @@ async function submit(req, res) {
 async function list(req, res) {
   const items = await all();
   const q = clean(req.query.q, 120).toLocaleLowerCase();
+  const view = clean(req.query.view, 20) || 'active';
   const status = clean(req.query.status, 30);
   const submissions = items.filter(item => {
     const text = [item.name, item.email, item.username, item.subject, item.message].join(' ').toLocaleLowerCase();
-    return (!q || text.includes(q)) && (!status || status === 'all' || item.status === status);
+    const inView = view === 'history' ? item.status === 'resolved' : item.status !== 'resolved';
+    return inView && (!q || text.includes(q)) && (!status || status === 'all' || item.status === status);
   });
-  return send(res, 200, { submissions, unreadCount: items.filter(item => !item.readAt).length });
+  return send(res, 200, { submissions, newCount: items.filter(item => item.status !== 'resolved').length, historyCount: items.filter(item => item.status === 'resolved').length });
 }
 
 async function detail(req, res) {
   const item = await get(req.params.id);
   if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
-  if (!item.readAt) {
-    item.readAt = Date.now();
-    item.readBy = Number(req.uid);
-    await db.setObject(key(item.id), item);
-  }
+  // Opening a submission does not change its workflow category.
   return send(res, 200, { submission: item });
 }
 
@@ -183,6 +181,15 @@ async function update(req, res) {
   item.updatedAt = Date.now();
   await db.setObject(key(item.id), item);
   return send(res, 200, { success: true, submission: item });
+}
+
+async function clearHistory(req, res) {
+  const items = (await all()).filter(item => item.status === 'resolved');
+  for (const item of items) {
+    await db.delete(key(item.id));
+    await db.sortedSetRemove(PREFIX + 'submissions', item.id);
+  }
+  return send(res, 200, { success: true, deleted: items.length });
 }
 
 async function remove(req, res) {
@@ -321,6 +328,7 @@ async function addRoutes({ router, middleware, helpers }) {
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/submissions/:id', staffMw, detail);
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/submissions/:id', staffWriteMw, update);
   routeHelpers.setupApiRoute(router, 'delete', '/contact-inbox/submissions/:id', staffWriteMw, remove);
+  routeHelpers.setupApiRoute(router, 'delete', '/contact-inbox/history', staffWriteMw, clearHistory);
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/replies', staffWriteMw, reply);
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/chat', staffWriteMw, openChat);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/unread', staffMw, unread);
