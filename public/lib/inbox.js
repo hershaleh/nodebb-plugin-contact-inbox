@@ -31,7 +31,10 @@
     link.setAttribute('aria-label', 'תיבת פניות');
     link.innerHTML = '<i class="fa fa-envelope" aria-hidden="true"></i><span class="ci-nav-badge" hidden></span>';
     item.appendChild(link);
-    nav.appendChild(item);
+    const nearby = nav.querySelector('#chat-list, #notifications, [component="chat/list"], [component="notifications"]');
+    const nearbyItem = nearby && nearby.closest('li');
+    if (nearbyItem && nearbyItem.parentNode === nav) nav.insertBefore(item, nearbyItem.nextSibling);
+    else nav.appendChild(item);
     const badge = link.querySelector('.ci-nav-badge');
     async function refresh() {
       try {
@@ -46,6 +49,7 @@
       }
     }
     refresh();
+    window.addEventListener('contact-inbox:refresh-unread', refresh);
     window.setInterval(refresh, 60000);
   }
 
@@ -156,6 +160,7 @@
         });
         detail.append(remove);
         await load();
+        window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
       } catch (err) { detail.textContent = err.message; }
     }
 
