@@ -45,8 +45,9 @@ const response = await fetch('/api/v3/plugins/contact-inbox/submissions', {
   },
   body: JSON.stringify({ name, email, subject, message }),
 });
-const result = await response.json();
-if (!response.ok) throw new Error(result.error || 'שליחת הפנייה נכשלה');
+const payload = await response.json();
+const result = payload.response || payload;
+if (!response.ok) throw new Error(payload.status?.message || payload.error || 'שליחת הפנייה נכשלה');
 ```
 
 השדות הנדרשים: `name`, `email`, `subject`, `message`. אם הפונה מחובר לפורום, התוסף משייך את הפנייה אוטומטית לחשבון המאומת שלו. שדה username שנשלח מטופס ציבורי אינו מהימן ולא יוצר קישור לצ'אט, כדי למנוע התחזות.
