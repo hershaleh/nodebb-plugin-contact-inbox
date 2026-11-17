@@ -33,6 +33,7 @@ test('manifest registers NodeBB 4.x application and API route hooks', () => {
   assert.ok(hooks.includes('static:api.routes'));
   assert.ok(hooks.includes('filter:admin.header.build'));
   assert.equal(manifest.library, './library.js');
+  assert.ok(manifest.scss.includes('public/lib/inbox.scss'));
 });
 
 test('email templates referenced by the API exist', () => {
