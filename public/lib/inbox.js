@@ -7,15 +7,35 @@
   const page = rel + '/plugins/contact-inbox';
   const $ = window.jQuery;
 
+  let csrfToken = window.config && window.config.csrf_token;
+
+  async function getCsrfToken() {
+    if (csrfToken) return csrfToken;
+    const response = await fetch(rel + '/api/config', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    const config = await response.json().catch(() => ({}));
+    csrfToken = config.csrf_token || (config.response && config.response.csrf_token) || '';
+    if (!csrfToken) throw new Error('לא ניתן לקבל אסימון אבטחה מ-NodeBB. יש לרענן את הדף ולהתחבר מחדש.');
+    return csrfToken;
+  }
+
   async function request(path, options) {
     const opts = Object.assign({ credentials: 'same-origin' }, options || {});
+    const method = String(opts.method || 'GET').toUpperCase();
     opts.headers = Object.assign({ 'Content-Type': 'application/json', 'Accept': 'application/json' }, opts.headers || {});
-    const token = document.querySelector('meta[name="csrf-token"]');
-    if (token && opts.method && opts.method !== 'GET') opts.headers['x-csrf-token'] = token.content;
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      opts.headers['x-csrf-token'] = await getCsrfToken();
+    }
     const response = await fetch(API + path, opts);
-    const raw = await response.json().catch(() => ({}));
+    const raw = await response.json().catch(async () => ({ error: await response.text().catch(() => '') }));
     const data = raw && raw.response && typeof raw.response === 'object' ? raw.response : raw;
-    if (!response.ok) throw new Error((data.status && data.status.message) || data.error || raw.error || 'הפעולה נכשלה');
+    if (!response.ok) {
+      const message = (raw.status && raw.status.message) || (data.status && data.status.message) ||
+        data.error || raw.error || ('שגיאת שרת (' + response.status + ')');
+      throw new Error(message);
+    }
+    if (raw.status && raw.status.code && raw.status.code !== 'ok') {
+      throw new Error(raw.status.message || 'הפעולה נכשלה');
+    }
     return data;
   }
 
@@ -46,7 +66,17 @@
     if (!window.__ciUnreadTimer) window.__ciUnreadTimer = window.setInterval(refresh, 30000);
   }
 
-  function notify(message, type) {
+  async function notify(message, type) {
+    try {
+      if (window.app && typeof window.app.require === 'function') {
+        const alerts = await window.app.require('alerts');
+        if (type === 'success' && typeof alerts.success === 'function') return alerts.success(message);
+        if ((type === 'danger' || type === 'error') && typeof alerts.error === 'function') return alerts.error(message);
+        if (typeof alerts.alert === 'function') return alerts.alert({ title: 'תיבת פניות', message, type: type === 'danger' ? 'error' : (type || 'info'), timeout: 5000 });
+      }
+    } catch (err) {
+      // Fall back to a local toast if the NodeBB alerts module is unavailable.
+    }
     let host = document.getElementById('ci-toast-host');
     if (!host) {
       host = document.createElement('div');
@@ -79,11 +109,11 @@
       footer.appendChild(b);
     });
     document.body.appendChild(wrap);
-    const close = () => {
-      if ($ && $.fn && $.fn.modal) $(wrap).modal('hide');
-      else wrap.remove();
-    };
-    if ($ && $.fn && $.fn.modal) {
+    const close = () => closeModal(wrap);
+    if (window.bootstrap && window.bootstrap.Modal) {
+      wrap.addEventListener('hidden.bs.modal', () => wrap.remove(), { once: true });
+      window.bootstrap.Modal.getOrCreateInstance(wrap, { backdrop: 'static', keyboard: true }).show();
+    } else if ($ && $.fn && $.fn.modal) {
       $(wrap).on('hidden.bs.modal', () => wrap.remove()).modal({ backdrop: 'static', keyboard: true, show: true });
     } else {
       wrap.classList.add('in'); wrap.style.display = 'block';
@@ -91,6 +121,16 @@
       wrap.querySelector('[data-dismiss="modal"]').addEventListener('click', close);
     }
     return { element: wrap, close };
+  }
+
+  function closeModal(wrap) {
+    if (!wrap) return;
+    if (window.bootstrap && window.bootstrap.Modal) {
+      const instance = window.bootstrap.Modal.getInstance(wrap);
+      if (instance) { instance.hide(); return; }
+    }
+    if ($ && $.fn && $.fn.modal) { closeModal(wrap); return; }
+    wrap.remove();
   }
 
   function initInbox() {
@@ -104,7 +144,9 @@
     const count = document.getElementById('ci-count');
     const historyButton = document.getElementById('ci-history-button');
     const settingsButton = document.getElementById('ci-settings-button');
-    let view = 'active', activeId = null, settings = null, isAdmin = false;
+    const routePath = (window.location.pathname || '').replace(/\\/+$/, '');
+    const isSettingsPage = routePath.endsWith('/settings');
+    let view = routePath.endsWith('/history') ? 'history' : 'active', activeId = null, settings = null, isAdmin = false;
 
     const el = (tag, cls, value) => {
       const node = document.createElement(tag);
@@ -240,11 +282,8 @@
       } catch (err) { detail.textContent = err.message; }
     }
 
-    historyButton.addEventListener('click', async () => {
-      view = view === 'active' ? 'history' : 'active';
-      activeId = null; detail.replaceChildren(el('p', 'ci-empty', 'בחר פנייה כדי להציג את פרטיה.'));
-      document.getElementById('ci-history-tools').hidden = view !== 'history';
-      await load();
+    historyButton.addEventListener('click', () => {
+      window.location.assign(page + (view === 'active' ? '/history' : ''));
     });
     document.getElementById('ci-refresh').addEventListener('click', load);
     search.addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
@@ -259,8 +298,62 @@
         settings = Object.assign(data.settings, { smtpConfigured: !!data.smtpConfigured });
       }
     }
-    settingsButton.addEventListener('click', async () => {
+    settingsButton.addEventListener('click', () => {
+      window.location.assign(page + '/settings');
+    });
+
+    async function renderSettingsPage() {
+      const inboxPage = document.getElementById('ci-inbox-page');
+      const settingsPage = document.getElementById('ci-settings-page');
+      if (!settingsPage) return;
+      if (inboxPage) inboxPage.hidden = true;
+      settingsPage.hidden = false;
+      historyButton.hidden = true;
+      settingsButton.hidden = true;
+      const content = document.getElementById('ci-settings-content');
+      content.replaceChildren(el('p', '', 'טוען הגדרות…'));
       await loadSettings();
+      const form = el('div', 'ci-settings-form');
+      if (isAdmin) {
+        const groupsLabel = el('label', '', 'קבוצות מורשות (שמות מופרדים בפסיקים)');
+        const groupsInput = el('input', 'form-control'); groupsInput.value = (settings.allowedGroups || ['administrators']).join(', ');
+        const rateLabel = el('label', '', 'מספר פניות מרבי מכתובת IP בשעה');
+        const rateInput = el('input', 'form-control'); rateInput.type = 'number'; rateInput.min = '1'; rateInput.max = '30'; rateInput.value = settings.maxPerHour || 5;
+        const notifyLabel = el('label', 'checkbox', 'התראות דוא״ל לצוות'); const notifyInput = el('input'); notifyInput.type = 'checkbox'; notifyInput.checked = !!settings.emailNotifications; notifyLabel.prepend(notifyInput);
+        const repliesLabel = el('label', 'checkbox', 'אפשר שליחת תשובות בדוא״ל'); const repliesInput = el('input'); repliesInput.type = 'checkbox'; repliesInput.checked = !!settings.emailReplies; repliesLabel.prepend(repliesInput);
+        form.append(el('h3', '', 'הגדרות מנהל'), groupsLabel, groupsInput, rateLabel, rateInput, notifyLabel, repliesLabel,
+          el('p', 'text-muted', settings.smtpConfigured ? 'SMTP וכתובת השולח מוגדרים.' : 'SMTP או כתובת השולח אינם מוגדרים; שליחת תשובות לא תהיה זמינה.'));
+        form.dataset.adminSettings = '1';
+        form._adminFields = { groupsInput, rateInput, notifyInput, repliesInput };
+      }
+      const prefs = el('section', 'ci-personal-prefs');
+      prefs.append(el('h3', '', 'העדפות התראות אישיות'));
+      const personalEmail = el('input', 'form-control'); personalEmail.type = 'email'; personalEmail.placeholder = 'כתובת לקבלת התראות';
+      const personalNotify = el('input'); personalNotify.type = 'checkbox';
+      const personalLabel = el('label', '', 'שליחת התראה אליי כשמתקבלת פנייה חדשה'); personalLabel.prepend(personalNotify);
+      prefs.append(personalEmail, personalLabel); form.append(prefs);
+      const p = await request('/preferences');
+      personalEmail.value = p.preferences.email || ''; personalNotify.checked = !!p.preferences.notify;
+      const save = el('button', 'btn btn-primary', 'שמירת הגדרות'); save.type = 'button';
+      save.addEventListener('click', async () => {
+        save.disabled = true;
+        try {
+          await request('/preferences', { method: 'PUT', body: JSON.stringify({ email: personalEmail.value, notify: personalNotify.checked }) });
+          if (isAdmin && form._adminFields) {
+            const f = form._adminFields;
+            await request('/settings', { method: 'PUT', body: JSON.stringify({
+              allowedGroups: f.groupsInput.value.split(',').map(v => v.trim()).filter(Boolean),
+              maxPerHour: Number(f.rateInput.value), retentionDays: Number(settings.retentionDays) || 0,
+              emailNotifications: f.notifyInput.checked, emailReplies: f.repliesInput.checked
+            }) });
+          }
+          await notify('ההגדרות נשמרו.', 'success');
+        } catch (err) { await notify(err.message, 'danger'); }
+        finally { save.disabled = false; }
+      });
+      form.append(save);
+      content.replaceChildren(form);
+    }
       const form = document.createElement('div');
       const groupsLabel = el('label', '', 'קבוצות מורשות (שמות מופרדים בפסיקים)');
       const groupsInput = el('input', 'form-control'); groupsInput.value = (settings.allowedGroups || ['administrators']).join(', ');
@@ -320,14 +413,20 @@
         msg.textContent = 'מדיניות השמירה נשמרה.';
       } catch (err) { msg.textContent = err.message; }
     });
-    loadSettings().then(() => {
-      if (isAdmin) {
-        document.getElementById('ci-retention').value = settings.retentionDays || 0;
-        document.getElementById('ci-retention-admin').hidden = false;
-      }
-    });
-    document.getElementById('ci-history-tools').hidden = true;
-    load();
+    if (isSettingsPage) {
+      renderSettingsPage().catch(err => { document.getElementById('ci-settings-content').textContent = err.message; });
+    } else {
+      document.getElementById('ci-history-tools').hidden = view !== 'history';
+      document.getElementById('ci-history-button').textContent = view === 'history' ? 'חזרה לפניות פעילות' : 'היסטוריית פניות';
+      document.getElementById('ci-back-button').hidden = true;
+      loadSettings().then(() => {
+        if (isAdmin && document.getElementById('ci-retention')) {
+          document.getElementById('ci-retention').value = settings.retentionDays || 0;
+          document.getElementById('ci-retention-admin').hidden = false;
+        }
+      }).catch(err => notify(err.message, 'danger'));
+      load();
+    }
   }
 
   function start() { addTopbarIcon(); initInbox(); }
