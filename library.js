@@ -58,7 +58,19 @@ async function all() {
   const ids = await db.getSortedSetRevRange(PREFIX + 'submissions', 0, -1);
   if (!ids.length) return [];
   const values = await Promise.all(ids.map(get));
-  return values.filter(item => item && !item.deletedAt);
+  const cfg = await config();
+  const cutoff = cfg.retentionDays ? Date.now() - cfg.retentionDays * 86400000 : 0;
+  const kept = [];
+  for (const item of values) {
+    if (!item || item.deletedAt) continue;
+    if (cutoff && item.createdAt < cutoff) {
+      await db.delete(key(item.id));
+      await db.sortedSetRemove(PREFIX + 'submissions', item.id);
+    } else {
+      kept.push(item);
+    }
+  }
+  return kept;
 }
 
 async function countUnread() {
