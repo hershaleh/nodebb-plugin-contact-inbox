@@ -12,8 +12,8 @@
   "scripts": [
     "public/lib/inbox.js"
   ],
-  "styles": [
-    "public/lib/inbox.css"
+  "scss": [
+    "public/lib/inbox.scss"
   ],
   "staticDirs": {
     "public": "./public"
