@@ -250,11 +250,13 @@
     status.addEventListener('change', load);
 
     async function loadSettings() {
-      try {
+      const caps = await request('/capabilities');
+      settings = { emailReplies: !!caps.emailReplies, smtpConfigured: !!caps.smtpConfigured };
+      isAdmin = !!caps.isAdmin;
+      if (isAdmin) {
         const data = await request('/settings');
-        settings = data.settings; settings.smtpConfigured = data.smtpConfigured;
-        isAdmin = true;
-      } catch (_) { settings = { emailReplies: false, smtpConfigured: false }; isAdmin = false; }
+        settings = Object.assign(data.settings, { smtpConfigured: !!data.smtpConfigured });
+      }
     }
     settingsButton.addEventListener('click', async () => {
       await loadSettings();
