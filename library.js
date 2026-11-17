@@ -11,7 +11,7 @@ const DEFAULTS = Object.freeze({
   emailNotifications: false,
   emailReplies: false,
 });
-let db, user, groups, meta, routeHelpers, emailer;
+let db, user, groups, meta, routeHelpers, emailer, retentionTimer;
 
 const clean = (value, max) => String(value == null ? '' : value).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 const validEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -266,6 +266,11 @@ async function init({ router }) {
   meta = require.main.require('./src/meta');
   emailer = require.main.require('./src/emailer');
   routeHelpers = require.main.require('./src/routes/helpers');
+  if (retentionTimer) clearInterval(retentionTimer);
+  const runRetention = () => all().catch(err => console.error('[contact-inbox] retention cleanup failed:', err.message));
+  void runRetention();
+  retentionTimer = setInterval(runRetention, 60 * 60 * 1000);
+  if (typeof retentionTimer.unref === 'function') retentionTimer.unref();
   routeHelpers.setupAdminPageRoute(router, '/admin/plugins/contact-inbox', [staffOnly], adminPage);\n  routeHelpers.setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], adminPage);
 }
 
