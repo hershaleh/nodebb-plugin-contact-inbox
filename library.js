@@ -96,7 +96,7 @@ async function notifyStaff(submission) {
         subject: submission.subject,
         name: submission.name,
         message: submission.message,
-        inboxUrl: (meta.config.url || '').replace(/\/$/, '') + '/admin/plugins/contact-inbox',
+        inboxUrl: (meta.config.url || '').replace(/\/$/, '') + '/plugins/contact-inbox',
       });
     }
   } catch (err) {
