@@ -1,12 +1,13 @@
 {
   "id": "nodebb-plugin-contact-inbox",
   "name": "Contact Inbox",
-  "description": "Secure contact form inbox for NodeBB administrators.",
+  "description": "Private contact inbox for NodeBB with staff permissions and configurable email options.",
   "url": "https://github.com/hershaleh/nodebb-plugin-contact-inbox",
   "library": "./library.js",
   "hooks": [
     { "hook": "static:app.load", "method": "init" },
-    { "hook": "filter:router.build", "method": "addRoutes" }
+    { "hook": "static:api.routes", "method": "addRoutes" },
+    { "hook": "filter:admin.header.build", "method": "addAdminNavigation" }
   ],
   "scripts": [
     "public/lib/inbox.js"
@@ -17,5 +18,6 @@
   "staticDirs": {
     "public": "./public"
   },
+  "templates": "./templates",
   "languages": "languages"
 }
