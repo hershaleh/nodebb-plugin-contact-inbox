@@ -83,7 +83,7 @@ test('inbox separates active submissions from resolved history without read-stat
   assert.ok(client.includes("routePath.endsWith('/history') ? 'history' : 'active'"));
   assert.ok(client.includes("view === 'history'"));
   assert.ok(client.includes("request('/unread')"));
-  assert.ok(client.includes("li.className = 'contact-inbox-nav'"));
+  assert.ok(server.includes("id: 'contact-inbox-nav'"));
   assert.ok(server.includes("view === 'history' ? item.status === 'resolved' : item.status !== 'resolved'"));
   assert.ok(server.includes("item.status !== 'resolved').length"));
   assert.ok(server.includes("'/contact-inbox/history'"));
@@ -116,11 +116,46 @@ test('inbox uses native NodeBB toast alerts and dedicated history/settings route
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
   const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
   const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
-  assert.ok(client.includes("window.app.require('alerts')"));
+  assert.ok(client.includes("window.require(['alerts']"));
   assert.ok(client.includes("window.location.assign(page + '/settings')"));
   assert.ok(client.includes("window.location.assign(page + (view === 'active' ? '/history' : ''))"));
   assert.ok(server.includes("setupPageRoute(router, '/plugins/contact-inbox/history'"));
   assert.ok(server.includes("setupPageRoute(router, '/plugins/contact-inbox/settings'"));
   assert.ok(template.includes('id="ci-settings-page"'));
   assert.ok(template.includes('id="ci-back-button"'));
+});
+
+
+test('manual deletion uses an explicit POST action endpoint and confirms success', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  assert.ok(client.includes("'/submissions/' + encodeURIComponent(id) + '/delete'"));
+  assert.ok(client.includes("method: 'POST', body: '{}'"));
+  assert.ok(server.includes("'/contact-inbox/submissions/:id/delete'"));
+  assert.ok(client.includes('הפנייה נמחקה בהצלחה.'));
+});
+
+test('history clearing has an explicit POST endpoint', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  assert.ok(client.includes("'/history/clear'"));
+  assert.ok(server.includes("'/contact-inbox/history/clear'"));
+});
+
+test('forum navigation uses NodeBB native navigation hook and floating alerts module', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin.json'), 'utf8'));
+  assert.ok(manifest.hooks.some(hook => hook.hook === 'filter:navigation.available' && hook.method === 'addNavigation'));
+  assert.ok(server.includes("iconClass: 'fa-envelope'"));
+  assert.ok(server.includes("id: 'contact-inbox-nav'"));
+  assert.ok(client.includes("window.require(['alerts']"));
+  assert.ok(client.includes("alerts.success(message)"));
+  assert.ok(client.includes('function refreshNavigationIcon()'));
+});
+
+test('successful status and retention actions display native success notifications', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(client.includes('הפנייה סומנה כטופלה והועברה להיסטוריה.'));
+  assert.ok(client.includes('מדיניות שמירת ההיסטוריה נשמרה.'));
 });
