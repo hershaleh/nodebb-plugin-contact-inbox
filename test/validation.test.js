@@ -80,7 +80,7 @@ test('front-end inbox uses LTR source values so NodeBB RTL processing outputs RT
 test('inbox separates active submissions from resolved history without read-state transitions', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
   const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
-  assert.ok(client.includes("view = 'active'"));
+  assert.ok(client.includes("routePath.endsWith('/history') ? 'history' : 'active'"));
   assert.ok(client.includes("view === 'history'"));
   assert.ok(client.includes("request('/unread')"));
   assert.ok(client.includes("li.className = 'contact-inbox-nav'"));
