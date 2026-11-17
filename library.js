@@ -37,7 +37,7 @@ async function hasAccess(uid) {
   if (cfg.allowedGroups.includes('Global Moderators') && await user.isGlobalModerator(uid)) return true;
   for (const groupName of cfg.allowedGroups) {
     if (groupName === 'administrators' || groupName === 'Global Moderators') continue;
-    if (groups && typeof groups.isMember === 'function' && await groups.isMember(groupName, uid)) return true;
+    if (groups && typeof groups.isMember === 'function' && await groups.isMember(uid, groupName)) return true;
   }
   return false;
 }
