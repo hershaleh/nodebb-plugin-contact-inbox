@@ -1,0 +1,22 @@
+{
+  "name": "nodebb-plugin-contact-inbox",
+  "version": "1.0.0",
+  "description": "Private contact form inbox for NodeBB with role-based access, shared read state, chat shortcuts and configurable retention.",
+  "main": "library.js",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hershaleh/nodebb-plugin-contact-inbox.git"
+  },
+  "keywords": ["nodebb", "plugin", "contact", "inbox", "support"],
+  "nbbpm": {
+    "compatibility": "^4.0.0"
+  },
+  "scripts": {
+    "test": "node --test",
+    "lint": "node --check library.js && node --check public/lib/admin.js && node --check public/lib/inbox.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
