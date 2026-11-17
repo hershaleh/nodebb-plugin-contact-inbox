@@ -271,7 +271,8 @@ async function init({ router }) {
   void runRetention();
   retentionTimer = setInterval(runRetention, 60 * 60 * 1000);
   if (typeof retentionTimer.unref === 'function') retentionTimer.unref();
-  routeHelpers.setupAdminPageRoute(router, '/admin/plugins/contact-inbox', [staffOnly], adminPage);\n  routeHelpers.setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], adminPage);
+  routeHelpers.setupAdminPageRoute(router, '/admin/plugins/contact-inbox', [staffOnly], adminPage);
+  routeHelpers.setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], adminPage);
 }
 
 async function addRoutes({ router, middleware }) {
