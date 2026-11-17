@@ -110,10 +110,9 @@ async function submit(req, res) {
     const ip = clean(req.ip || req.socket?.remoteAddress || 'unknown', 100);
     const rateKey = PREFIX + 'rate:' + crypto.createHash('sha256').update(ip).digest('hex');
     const cfg = await config();
-    const count = Number(await db.get(rateKey)) || 0;
-    if (count >= cfg.maxPerHour) return send(res, 429, { error: 'נשלחו יותר מדי פניות. נסו שוב מאוחר יותר.' });
-    await db.set(rateKey, count + 1);
-    await db.expire(rateKey, 3600);
+    const count = Number(await db.incrObjectField(rateKey, 'count'));
+    if (count === 1) await db.expire(rateKey, 3600);
+    if (count > cfg.maxPerHour) return send(res, 429, { error: 'נשלחו יותר מדי פניות. נסו שוב מאוחר יותר.' });
 
     const name = clean(body.name, 120);
     const email = clean(body.email, 254).toLowerCase();
