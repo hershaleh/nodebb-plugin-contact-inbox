@@ -258,12 +258,12 @@ async function init({ router }) {
 
 async function addRoutes({ router, middleware }) {
   const publicMw = [];
-  const staffMw = [middleware.ensureLoggedIn, staffOnly];
-  const adminMw = [middleware.ensureLoggedIn, staffOnly];
+  const staffMw = [staffOnly];
+  const adminMw = [staffOnly];
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions', publicMw, submit);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/submissions', staffMw, list);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/submissions/:id', staffMw, detail);
-  routeHelpers.setupApiRoute(router, 'patch', '/contact-inbox/submissions/:id', staffMw, update);
+  routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/submissions/:id', staffMw, update);
   routeHelpers.setupApiRoute(router, 'delete', '/contact-inbox/submissions/:id', staffMw, remove);
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/replies', staffMw, reply);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/unread', staffMw, unread);
