@@ -237,7 +237,7 @@ async function openChat(req, res) {
     let roomId = await messaging.hasPrivateChat(Number(req.uid), Number(item.uid));
     if (!roomId) roomId = await messaging.newRoom(Number(req.uid), { uids: [Number(item.uid)] });
     const staffSlug = await user.getUserField(req.uid, 'userslug');
-    const baseUrl = String(meta.config.url || '').replace(/\\/$/, '');
+    const baseUrl = String(meta.config.url || '').replace(/\/$/, '');
     return send(res, 200, { url: baseUrl + '/user/' + encodeURIComponent(staffSlug) + '/chats/' + roomId });
   } catch (err) {
     return send(res, 403, { error: 'לא ניתן לפתוח צ׳אט עם המשתמש: ' + (err.message || 'אין הרשאה') });
