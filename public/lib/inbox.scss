@@ -1,4 +1,4 @@
-.contact-inbox-page{direction:rtl;unicode-bidi:plaintext;box-sizing:border-box;width:calc(100% - 32px);max-width:1280px;margin:24px auto;padding:clamp(12px,2vw,24px);color:var(--bs-body-color,#212529);text-align:right;overflow-wrap:anywhere}
+.contact-inbox-page{direction:ltr;unicode-bidi:plaintext;box-sizing:border-box;width:calc(100% - 32px);max-width:1280px;margin:24px auto;padding:clamp(12px,2vw,24px);color:var(--bs-body-color,#212529);text-align:left;overflow-wrap:anywhere}
 .contact-inbox-page *{box-sizing:border-box;min-width:0}
 .contact-inbox-header,.contact-inbox-toolbar,.ci-row-top,.ci-controls{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .contact-inbox-header{flex-wrap:wrap;margin-bottom:20px}
@@ -10,7 +10,7 @@
 .contact-inbox-layout{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:16px;align-items:start}
 .contact-inbox-list,.contact-inbox-detail{min-width:0;min-height:420px;padding:16px;border:1px solid var(--bs-border-color,#ddd);border-radius:12px;background:var(--bs-body-bg,#fff)}
 .contact-inbox-list{max-height: min(72vh,760px);overflow-y:auto;overscroll-behavior:contain}
-.ci-row{display:block;width:100%;max-width:100%;margin:0 0 9px;padding:13px;border:1px solid var(--bs-border-color,#ddd);border-radius:9px;background:transparent;color:inherit;text-align:right;white-space:normal;overflow-wrap:anywhere}
+.ci-row{display:block;width:100%;max-width:100%;margin:0 0 9px;padding:13px;border:1px solid var(--bs-border-color,#ddd);border-radius:9px;background:transparent;color:inherit;text-align:left;white-space:normal;overflow-wrap:anywhere}
 .ci-row:hover,.ci-row:focus-visible{border-color:var(--bs-primary,#337ab7)}
 .ci-row.active{border-color:var(--bs-primary,#337ab7);background:rgba(51,122,183,.07)}
 .ci-row-top{align-items:flex-start;flex-wrap:wrap}
