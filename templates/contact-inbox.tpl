@@ -1,48 +1,30 @@
 <div class="container contact-inbox-page" dir="rtl">
   <header class="contact-inbox-header">
-    <div>
-      <h1>תיבת פניות</h1>
-      <p>פניות שהתקבלו דרך טופס יצירת הקשר</p>
+    <div><h1>תיבת פניות</h1><p>ניהול פניות שהתקבלו דרך טופס צור קשר</p></div>
+    <div class="ci-header-actions">
+      <span id="ci-count" class="label label-primary" aria-live="polite">פניות חדשות: —</span>
+      <button id="ci-history-button" class="btn btn-default" type="button">היסטוריית פניות</button>
+      <button id="ci-settings-button" class="btn btn-default" type="button"><i class="fa fa-cog" aria-hidden="true"></i> הגדרות</button>
     </div>
-    <span id="ci-unread" class="label label-primary" aria-live="polite">לא נקראו: —</span>
   </header>
-
   <div class="contact-inbox-toolbar">
     <input id="ci-search" class="form-control" type="search" placeholder="חיפוש לפי שם, דוא״ל, נושא או תוכן" aria-label="חיפוש פניות">
     <select id="ci-status" class="form-control" aria-label="סינון לפי סטטוס">
-      <option value="all">כל הסטטוסים</option>
-      <option value="new">חדשות</option>
-      <option value="in_progress">בטיפול</option>
-      <option value="resolved">טופלו</option>
+      <option value="all">כל הסטטוסים</option><option value="new">חדשות</option><option value="in_progress">בטיפול</option>
     </select>
     <button id="ci-refresh" class="btn btn-primary" type="button">רענון</button>
   </div>
-
+  <section id="ci-history-tools" class="ci-history-tools" hidden>
+    <div><strong>היסטוריית פניות שטופלו</strong><p class="text-muted">כאן נשמרות פניות שסומנו כטופלו. קריאת פנייה אינה מעבירה אותה לכאן.</p></div>
+    <button id="ci-history-clear" class="btn btn-danger" type="button">מחיקת כל ההיסטוריה</button>
+    <div id="ci-retention-admin" class="ci-retention-admin" hidden>
+      <label for="ci-retention">מחיקה אוטומטית של פניות מההיסטוריה לאחר (ימים; 0 = ללא מחיקה אוטומטית)</label>
+      <div class="ci-retention-row"><input id="ci-retention" class="form-control" type="number" min="0" max="3650" value="0"><button id="ci-retention-save" class="btn btn-default" type="button">שמירת מדיניות</button></div>
+      <p id="ci-retention-message" role="status"></p>
+    </div>
+  </section>
   <div class="contact-inbox-layout">
     <section id="ci-list" class="contact-inbox-list" aria-label="רשימת פניות" aria-live="polite"><p>טוען פניות…</p></section>
-    <section id="ci-detail" class="contact-inbox-detail" aria-label="פרטי הפנייה"><p>בחר פנייה כדי להציג את פרטיה.</p></section>
+    <section id="ci-detail" class="contact-inbox-detail" aria-label="פרטי הפנייה"><p class="ci-empty">בחר פנייה כדי להציג את פרטיה.</p></section>
   </div>
-
-  <details class="ci-preferences">
-    <summary>העדפות אישיות והתראות</summary>
-    <label><input id="ci-notify" type="checkbox"> שליחת הודעת דוא״ל אליי כשמתקבלת פנייה חדשה</label>
-    <input id="ci-staff-email" class="form-control" type="email" placeholder="כתובת הדוא״ל לקבלת התראות">
-    <button id="ci-save-prefs" class="btn btn-default" type="button">שמירת העדפות אישיות</button>
-    <p id="ci-prefs-message" role="status"></p>
-  </details>
-
-  <details class="ci-admin-settings" id="ci-admin-settings" hidden>
-    <summary>הגדרות מנהל</summary>
-    <label>קבוצות מורשות (שמות קבוצות מופרדים בפסיקים)</label>
-    <input id="ci-groups" class="form-control" value="administrators">
-    <label>מחיקה אוטומטית לאחר מספר ימים (0 = מחיקה ידנית בלבד)</label>
-    <input id="ci-retention" class="form-control" type="number" min="0" max="3650" value="0">
-    <label>מספר פניות מרבי מכתובת IP בשעה</label>
-    <input id="ci-rate" class="form-control" type="number" min="1" max="30" value="5">
-    <label><input id="ci-email-notifications" type="checkbox"> הפעלת התראות דוא״ל לצוות (כל איש צוות צריך להצטרף בהעדפות האישיות)</label>
-    <label><input id="ci-email-replies" type="checkbox"> אפשרות לשליחת תשובות בדוא״ל (דורש SMTP פעיל בהגדרות NodeBB)</label>
-    <p id="ci-smtp-note" class="text-muted"></p>
-    <button id="ci-save-settings" class="btn btn-primary" type="button">שמירת הגדרות</button>
-    <p id="ci-settings-message" role="status"></p>
-  </details>
 </div>
