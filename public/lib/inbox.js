@@ -405,6 +405,6 @@
   if ($) $(window).on('action:ajaxify.end', start);
   window.addEventListener('contact-inbox:refresh-unread', refreshNavigationIcon);
   if (!window.__ciNavRefreshTimer) window.__ciNavRefreshTimer = window.setInterval(refreshNavigationIcon, 30000);
-  const observer = new MutationObserver(() => { if (document.getElementById('contact-inbox-nav')) refreshNavigationIcon(); });
+  const observer = new MutationObserver(() => { const item = document.getElementById('contact-inbox-nav'); if (item && !item.querySelector('.ci-nav-badge')) refreshNavigationIcon(); });
   if (document.documentElement) observer.observe(document.documentElement, { childList: true, subtree: true });
 }());
