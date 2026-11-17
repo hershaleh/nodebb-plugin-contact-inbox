@@ -47,3 +47,10 @@ test('client calls the NodeBB v3 plugin API and uses the PUT update verb', () =>
   assert.ok(client.includes("method: 'PUT'"));
   assert.ok(client.includes("method: 'POST'"));
 });
+
+test('API routes enforce CSRF on writes and use standard NodeBB response formatting', () => {
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  assert.ok(server.includes('middleware.applyCSRF'));
+  assert.ok(server.includes('apiHelpers.formatApiResponse'));
+  assert.ok(server.includes('groups.isMember(uid, groupName)'));
+});
