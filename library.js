@@ -225,6 +225,24 @@ async function reply(req, res) {
   return send(res, 200, { success: true, reply: entry });
 }
 
+async function openChat(req, res) {
+  const item = await get(req.params.id);
+  if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
+  if (!item.uid || item.uid === Number(req.uid)) {
+    return send(res, 409, { error: 'הפנייה אינה משויכת לחשבון אחר שאפשר לפתוח איתו צ׳אט.' });
+  }
+  try {
+    const messaging = require.main.require('./src/messaging');
+    await messaging.canMessageUser(Number(req.uid), Number(item.uid));
+    let roomId = await messaging.hasPrivateChat(Number(req.uid), Number(item.uid));
+    if (!roomId) roomId = await messaging.newRoom(Number(req.uid), { uids: [Number(item.uid)] });
+    const staffSlug = await user.getUserField(req.uid, 'userslug');
+    return send(res, 200, { url: '/user/' + encodeURIComponent(staffSlug) + '/chats/' + roomId });
+  } catch (err) {
+    return send(res, 403, { error: 'לא ניתן לפתוח צ׳אט עם המשתמש: ' + (err.message || 'אין הרשאה') });
+  }
+}
+
 async function unread(req, res) {
   return send(res, 200, { count: await countUnread() });
 }
@@ -299,6 +317,7 @@ async function addRoutes({ router, middleware, helpers }) {
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/submissions/:id', staffWriteMw, update);
   routeHelpers.setupApiRoute(router, 'delete', '/contact-inbox/submissions/:id', staffWriteMw, remove);
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/replies', staffWriteMw, reply);
+  routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/chat', staffWriteMw, openChat);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/unread', staffMw, unread);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/preferences', staffMw, getStaffPrefs);
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/preferences', staffWriteMw, saveStaffPrefs);
