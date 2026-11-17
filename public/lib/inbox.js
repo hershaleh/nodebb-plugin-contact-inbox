@@ -26,7 +26,9 @@
       opts.headers['x-csrf-token'] = await getCsrfToken();
     }
     const response = await fetch(API + path, opts);
-    const raw = await response.json().catch(async () => ({ error: await response.text().catch(() => '') }));
+    const bodyText = await response.text();
+    let raw = {};
+    try { raw = bodyText ? JSON.parse(bodyText) : {}; } catch (_) { raw = { error: bodyText.slice(0, 500) }; }
     const data = raw && raw.response && typeof raw.response === 'object' ? raw.response : raw;
     if (!response.ok) {
       const message = (raw.status && raw.status.message) || (data.status && data.status.message) ||
