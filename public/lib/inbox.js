@@ -285,6 +285,9 @@
     historyButton.addEventListener('click', () => {
       window.location.assign(page + (view === 'active' ? '/history' : ''));
     });
+    document.getElementById('ci-back-button').addEventListener('click', () => {
+      window.location.assign(page);
+    });
     document.getElementById('ci-refresh').addEventListener('click', load);
     search.addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
     status.addEventListener('change', load);
@@ -310,6 +313,7 @@
       settingsPage.hidden = false;
       historyButton.hidden = true;
       settingsButton.hidden = true;
+      document.getElementById('ci-back-button').hidden = false;
       const content = document.getElementById('ci-settings-content');
       content.replaceChildren(el('p', '', 'טוען הגדרות…'));
       await loadSettings();
