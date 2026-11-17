@@ -100,3 +100,27 @@ test('inbox uses in-forum modal dialogs and disables unavailable actions', () =>
   assert.ok(template.includes('ci-settings-button'));
   assert.ok(template.includes('ci-history-clear'));
 });
+
+
+test('write requests use NodeBB config CSRF token and modal closing supports Bootstrap versions', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(client.includes('window.config && window.config.csrf_token'));
+  assert.ok(client.includes("fetch(rel + '/api/config'"));
+  assert.ok(client.includes("opts.headers['x-csrf-token'] = await getCsrfToken()"));
+  assert.ok(client.includes('function closeModal(wrap)'));
+  assert.ok(client.includes('window.bootstrap.Modal.getInstance(wrap)'));
+  assert.ok(client.includes("$(wrap).modal('hide')"));
+});
+
+test('inbox uses native NodeBB toast alerts and dedicated history/settings routes', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
+  assert.ok(client.includes("window.app.require('alerts')"));
+  assert.ok(client.includes("window.location.assign(page + '/settings')"));
+  assert.ok(client.includes("window.location.assign(page + (view === 'active' ? '/history' : ''))"));
+  assert.ok(server.includes("setupPageRoute(router, '/plugins/contact-inbox/history'"));
+  assert.ok(server.includes("setupPageRoute(router, '/plugins/contact-inbox/settings'"));
+  assert.ok(template.includes('id="ci-settings-page"'));
+  assert.ok(template.includes('id="ci-back-button"'));
+});
