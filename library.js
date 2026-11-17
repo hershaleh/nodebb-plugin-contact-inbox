@@ -235,14 +235,18 @@ async function reply(req, res) {
 async function openChat(req, res) {
   const item = await get(req.params.id);
   if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
-  if (!item.uid || item.uid === Number(req.uid)) {
-    return send(res, 409, { error: 'הפנייה אינה משויכת לחשבון אחר שאפשר לפתוח איתו צ׳אט.' });
+  if (!item.uid || !item.username || item.uid === Number(req.uid)) {
+    return send(res, 409, { error: 'הפנייה אינה משויכת לחשבון משתמש אחר שאפשר לפתוח איתו צ׳אט.' });
   }
   try {
     const messaging = require.main.require('./src/messaging');
-    await messaging.canMessageUser(Number(req.uid), Number(item.uid));
+    if (typeof messaging.canMessageUser === 'function') {
+      const allowed = await messaging.canMessageUser(Number(req.uid), Number(item.uid));
+      if (allowed === false) return send(res, 403, { error: 'הגדרות הפורום אינן מאפשרות לשלוח למשתמש זה הודעה פרטית.' });
+    }
     let roomId = await messaging.hasPrivateChat(Number(req.uid), Number(item.uid));
     if (!roomId) roomId = await messaging.newRoom(Number(req.uid), { uids: [Number(item.uid)] });
+    if (!roomId) throw new Error('NodeBB לא החזיר מזהה חדר צ׳אט');
     const staffSlug = await user.getUserField(req.uid, 'userslug');
     const baseUrl = String(meta.config.url || '').replace(/\/$/, '');
     return send(res, 200, { url: baseUrl + '/user/' + encodeURIComponent(staffSlug) + '/chats/' + roomId });
