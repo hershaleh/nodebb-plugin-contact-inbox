@@ -84,6 +84,7 @@ test('inbox separates active submissions from resolved history without read-stat
   assert.ok(client.includes("view === 'history'"));
   assert.ok(client.includes("request('/unread')"));
   assert.ok(server.includes("id: 'contact-inbox-nav'"));
+  assert.ok(server.includes('  addNavigation,'));
   assert.ok(server.includes("view === 'history' ? item.status === 'resolved' : item.status !== 'resolved'"));
   assert.ok(server.includes("item.status !== 'resolved').length"));
   assert.ok(server.includes("'/contact-inbox/history'"));
