@@ -4,7 +4,7 @@
   window.__contactInboxLoaded = true;
 
   const API = '/api/v3/plugins/contact-inbox';
-  const page = '/admin/plugins/contact-inbox';
+  const page = '/plugins/contact-inbox';
 
   async function request(path, options) {
     const opts = Object.assign({ credentials: 'same-origin' }, options || {});
