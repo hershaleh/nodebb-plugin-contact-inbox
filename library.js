@@ -306,7 +306,15 @@ async function adminPage(req, res) {
 }
 
 async function forumPage(req, res) {
-  res.render('contact-inbox', { title: 'תיבת פניות' });
+  res.render('contact-inbox', { title: 'תיבת פניות', inboxView: 'active' });
+}
+
+async function historyPage(req, res) {
+  res.render('contact-inbox', { title: 'היסטוריית פניות', inboxView: 'history' });
+}
+
+async function settingsPage(req, res) {
+  res.render('contact-inbox', { title: 'הגדרות תיבת הפניות', inboxView: 'settings' });
 }
 
 async function init({ router }) {
@@ -323,6 +331,8 @@ async function init({ router }) {
   if (typeof retentionTimer.unref === 'function') retentionTimer.unref();
   routeHelpers.setupAdminPageRoute(router, '/admin/plugins/contact-inbox', [staffOnly], adminPage);
   routeHelpers.setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], forumPage);
+  routeHelpers.setupPageRoute(router, '/plugins/contact-inbox/history', [staffOnly], historyPage);
+  routeHelpers.setupPageRoute(router, '/plugins/contact-inbox/settings', [staffOnly], settingsPage);
 }
 
 async function addRoutes({ router, middleware, helpers }) {
