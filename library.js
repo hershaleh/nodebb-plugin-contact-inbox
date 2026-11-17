@@ -118,12 +118,15 @@ async function submit(req, res) {
     const email = clean(body.email, 254).toLowerCase();
     const subject = clean(body.subject, 180);
     const message = clean(body.message, 10000);
-    const username = clean(body.username, 80).replace(/^@/, '');
     if (name.length < 2 || !validEmail(email) || subject.length < 2 || message.length < 5) {
       return send(res, 400, { error: 'יש למלא שם, כתובת דוא״ל תקינה, נושא ותוכן פנייה.' });
     }
-    const uid = username ? Number(await user.getUidByUsername(username)) || 0 : 0;
-    const userslug = uid ? await user.getUserField(uid, 'userslug') : '';
+    // Associate a submission only with the authenticated sender; never trust a
+    // public username field to create a chat shortcut to somebody else's account.
+    const uid = Number(req.uid) > 0 ? Number(req.uid) : 0;
+    const sender = uid ? await user.getUserFields(uid, ['username', 'userslug']) : {};
+    const username = sender.username || '';
+    const userslug = sender.userslug || '';
     const item = {
       id: id(), name, email, subject, message, username, uid, userslug,
       createdAt: Date.now(), readAt: 0, readBy: 0,
