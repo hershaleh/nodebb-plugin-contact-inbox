@@ -53,4 +53,6 @@ test('API routes enforce CSRF on writes and use standard NodeBB response formatt
   assert.ok(server.includes('middleware.applyCSRF'));
   assert.ok(server.includes('apiHelpers.formatApiResponse'));
   assert.ok(server.includes('groups.isMember(uid, groupName)'));
+  assert.ok(server.includes('messaging.hasPrivateChat'));
+  assert.ok(server.includes("'/contact-inbox/submissions/:id/chat'"));
 });
