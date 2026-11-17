@@ -358,41 +358,6 @@
       form.append(save);
       content.replaceChildren(form);
     }
-      const form = document.createElement('div');
-      const groupsLabel = el('label', '', 'קבוצות מורשות (שמות מופרדים בפסיקים)');
-      const groupsInput = el('input', 'form-control'); groupsInput.value = (settings.allowedGroups || ['administrators']).join(', ');
-      const rateLabel = el('label', '', 'מספר פניות מרבי מכתובת IP בשעה');
-      const rateInput = el('input', 'form-control'); rateInput.type = 'number'; rateInput.min = '1'; rateInput.max = '30'; rateInput.value = settings.maxPerHour || 5;
-      const notifyLabel = el('label', 'checkbox', 'התראות דוא״ל לצוות'); const notifyInput = el('input'); notifyInput.type = 'checkbox'; notifyInput.checked = !!settings.emailNotifications; notifyLabel.prepend(notifyInput);
-      const repliesLabel = el('label', 'checkbox', 'אפשר שליחת תשובות בדוא״ל'); const repliesInput = el('input'); repliesInput.type = 'checkbox'; repliesInput.checked = !!settings.emailReplies; repliesLabel.prepend(repliesInput);
-      const note = el('p', 'text-muted', settings.smtpConfigured ? 'SMTP וכתובת השולח מוגדרים.' : 'SMTP או כתובת השולח אינם מוגדרים; שליחת תשובות לא תהיה זמינה.');
-      form.append(groupsLabel, groupsInput, rateLabel, rateInput, notifyLabel, repliesLabel, note);
-      const prefs = el('section', 'ci-personal-prefs');
-      prefs.append(el('h4', '', 'העדפות התראות אישיות'));
-      const personalEmail = el('input', 'form-control'); personalEmail.type = 'email'; personalEmail.placeholder = 'כתובת לקבלת התראות';
-      const personalNotify = el('input'); personalNotify.type = 'checkbox';
-      const personalLabel = el('label', '', 'שליחת התראה אליי כשמתקבלת פנייה חדשה'); personalLabel.prepend(personalNotify);
-      prefs.append(personalEmail, personalLabel); form.append(prefs);
-      try {
-        const p = await request('/preferences'); personalEmail.value = p.preferences.email || ''; personalNotify.checked = !!p.preferences.notify;
-      } catch (_) {}
-      modal('הגדרות תיבת הפניות', form, [
-        { label: 'סגירה', className: 'btn-default' },
-        { label: 'שמירת הגדרות', className: 'btn-primary', onClick: async (wrap, button) => {
-          button.disabled = true;
-          try {
-            await request('/preferences', { method: 'PUT', body: JSON.stringify({ email: personalEmail.value, notify: personalNotify.checked }) });
-            if (isAdmin) await request('/settings', { method: 'PUT', body: JSON.stringify({
-              allowedGroups: groupsInput.value.split(',').map(v => v.trim()).filter(Boolean),
-              maxPerHour: Number(rateInput.value), retentionDays: Number(settings.retentionDays) || 0,
-              emailNotifications: notifyInput.checked, emailReplies: repliesInput.checked
-            }) });
-            $(wrap).modal('hide'); await loadSettings(); notify('ההגדרות נשמרו.', 'success');
-          } catch (err) { notify(err.message, 'danger'); button.disabled = false; }
-        }}
-      ]);
-    });
-
     document.getElementById('ci-history-clear').addEventListener('click', () => {
       modal('מחיקת היסטוריית הפניות', el('p', '', 'למחוק לצמיתות את כל הפניות שסומנו כטופלו ואת היסטוריית התשובות שלהן?'), [
         { label: 'ביטול', className: 'btn-default' },
