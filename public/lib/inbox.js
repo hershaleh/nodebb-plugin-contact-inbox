@@ -24,6 +24,7 @@
     if (!nav || document.getElementById('contact-inbox-nav')) return;
     const li = document.createElement('li');
     li.id = 'contact-inbox-nav';
+    li.className = 'contact-inbox-nav';
     li.innerHTML = '<a href="' + page + '" title="תיבת פניות" aria-label="תיבת פניות"><i class="fa fa-envelope" aria-hidden="true"></i><span class="ci-nav-badge" hidden></span></a>';
     const anchor = nav.querySelector('#chat-list, #notifications, a[href*="/chats"], a[href*="/notifications"]');
     const target = anchor && (anchor.closest('li') || anchor);
