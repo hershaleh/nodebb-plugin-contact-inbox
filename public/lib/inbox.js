@@ -43,7 +43,25 @@
 
   async function refreshNavigationIcon() {
     // NodeBB's vanilla header assigns this id to the <a>, not its wrapping <li>.
-    const link = document.getElementById('contact-inbox-nav');
+    let link = document.getElementById('contact-inbox-nav');
+    if (!link) {
+      const chatTarget = document.querySelector('#logged-in-menu > li.chats, #chat_dropdown, #chat-list, a[href*="/chats"], a[href*="/chat"], .chats, [component="chat"]');
+      const chatItem = chatTarget && (chatTarget.closest('li') || chatTarget);
+      const chatLink = chatItem && (chatItem.matches('a') ? chatItem : chatItem.querySelector('a'));
+      if (chatItem && chatLink && chatItem.parentNode) {
+        const navItemFallback = chatItem.cloneNode(true);
+        link = navItemFallback.matches('a') ? navItemFallback : navItemFallback.querySelector('a');
+        if (link) {
+          link.id = 'contact-inbox-nav';
+          link.href = page;
+          link.title = 'תיבת פניות';
+          link.setAttribute('aria-label', 'תיבת פניות');
+          link.innerHTML = '<i class="fa fa-envelope-o" aria-hidden="true"></i>';
+          navItemFallback.querySelectorAll('[id]').forEach(node => { if (node !== link) node.removeAttribute('id'); });
+          chatItem.parentNode.insertBefore(navItemFallback, chatItem);
+        }
+      }
+    }
     if (!link) return;
     const navItem = link.closest('li') || link;
 
@@ -381,8 +399,8 @@
       }
       const prefs = el('section', 'ci-personal-prefs');
       prefs.append(el('h3', '', 'העדפות התראות אישיות'));
-      const personalNotify = el('input'); personalNotify.type = 'checkbox';
-      const personalLabel = el('label', '', 'קבלת התראות דוא״ל לכתובת שבחשבון שלי');
+      const personalNotify = el('input', 'form-check-input'); personalNotify.type = 'checkbox';
+      const personalLabel = el('label', 'form-check form-switch ci-notify-switch', 'קבלת התראות דוא״ל לכתובת שבחשבון שלי');
       personalLabel.prepend(personalNotify);
       const extraEmails = el('div', 'ci-extra-emails');
       const addEmail = el('button', 'btn btn-default', '+ הוספת כתובת דוא״ל נוספת'); addEmail.type = 'button';
