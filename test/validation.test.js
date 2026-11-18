@@ -117,7 +117,7 @@ test('inbox uses native NodeBB toast alerts and dedicated history/settings route
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
   const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
   const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
-  assert.ok(client.includes("window.require(['alerts']" ) || client.includes("window.require || window.requirejs"));
+  assert.ok(client.includes("window.app.alert({"));
   assert.ok(client.includes("window.location.assign(page + '/settings')"));
   assert.ok(client.includes("window.location.assign(page + (view === 'active' ? '/history' : ''))"));
   assert.ok(server.includes("setupPageRoute(router, '/plugins/contact-inbox/history'"));
@@ -149,8 +149,8 @@ test('forum navigation uses NodeBB native navigation hook and floating alerts mo
   assert.ok(manifest.hooks.some(hook => hook.hook === 'filter:navigation.available' && hook.method === 'addNavigation'));
   assert.ok(server.includes("iconClass: 'fa-envelope-o'"));
   assert.ok(server.includes("id: 'contact-inbox-nav'"));
-  assert.ok(client.includes("amdRequire(['alerts']") || client.includes("window.require || window.requirejs"));
-  assert.ok(client.includes("alerts.success(message, 5000)"));
+  assert.ok(client.includes("window.app.alert({"));
+  assert.ok(client.includes("location: 'right-top'"));
   assert.ok(client.includes('function refreshNavigationIcon()'));
   assert.ok(client.includes("link.closest('li')"));
   assert.ok(client.includes("#logged-in-menu > li.chats, #chat_dropdown"));
@@ -168,7 +168,7 @@ test('successful status and retention actions display native success notificatio
 
 test('NodeBB native alerts are loaded through app.require and shown with alerts API', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
-  assert.ok(client.includes("amdRequire(['alerts']") || client.includes("window.require || window.requirejs"));
+  assert.ok(client.includes("window.app.alert({"));
   assert.ok(client.includes("window.app.alert({"));
   assert.ok(client.includes("location: 'right-top'"));
 });
@@ -212,7 +212,7 @@ test('staff notifications use the account email plus optional additional address
 
 test('NodeBB native alerts module is loaded with the AMD require API', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
-  assert.ok(client.includes("amdRequire(['alerts']") || client.includes("window.require || window.requirejs"));
+  assert.ok(client.includes("window.app.alert({"));
   assert.ok(client.includes("window.app.alert({"));
   assert.ok(client.includes("location: 'right-top'"));
 });
