@@ -18,8 +18,8 @@
       "method": "addAdminNavigation"
     },
     {
-      "hook": "filter:middleware.renderHeader",
-      "method": "addHeaderNavigation"
+      "hook": "filter:navigation.available",
+      "method": "addNavigation"
     }
   ],
   "scripts": [
