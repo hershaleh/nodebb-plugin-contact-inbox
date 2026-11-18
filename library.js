@@ -194,18 +194,6 @@ async function clearHistory(req, res) {
   return send(res, 200, { success: true, deleted: items.length });
 }
 
-async function addNavigation(menu) {
-  const items = Array.isArray(menu) ? menu : [];
-  if (items.some(item => item.id === 'contact-inbox-nav' || item.route === '/plugins/contact-inbox')) return items;
-  return items.concat([{
-    route: '/plugins/contact-inbox',
-    id: 'contact-inbox-nav',
-    title: 'תיבת פניות',
-    iconClass: 'fa-envelope-o',
-    textClass: 'visible-xs-inline',
-    text: 'תיבת פניות',
-  }]);
-}
 
 async function remove(req, res) {
   const submissionId = String(req.params.id || '');
@@ -436,6 +424,5 @@ module.exports = {
   init,
   addRoutes,
   addAdminNavigation,
-  addNavigation,
   _test: { clean, validEmail },
 };
