@@ -42,66 +42,87 @@
   }
 
   async function refreshNavigationIcon() {
-    let navNode = document.getElementById('contact-inbox-nav');
-    if (!navNode) return;
-    const navItem = navNode.closest('li') || navNode;
-    const anchor = navNode.matches('a') ? navNode : navNode.querySelector('a');
-    if (!anchor) return;
-    anchor.classList.add('ci-nav-anchor');
-    anchor.style.position = 'relative';
-    let badge = anchor.querySelector('.ci-nav-badge');
-    if (!badge) {
-      badge = document.createElement('span');
-      badge.className = 'badge badge-notification ci-nav-badge';
-      badge.setAttribute('aria-label', 'מספר הפניות הפעילות');
-      anchor.appendChild(badge);
-    }
-    badge.hidden = false;
-    badge.style.position = 'absolute';
-    badge.style.top = '-5px';
-    badge.style.insetInlineStart = '-7px';
-    badge.style.zIndex = '10';
     try {
-      let count;
-      try {
-        const result = await request('/unread');
-        count = Number(result.count);
-      } catch (apiError) {
-        const fallback = await request('/submissions?view=active');
-        count = Number(fallback.newCount);
+      let navNode = document.getElementById('contact-inbox-nav');
+      if (!navNode) {
+        let chatAnchor = null;
+        try {
+          if (window.app && typeof window.app.require === 'function') {
+            const components = await window.app.require('components');
+            const chatIcon = components && components.get && components.get('chat/icon');
+            if (chatIcon && chatIcon.length) {
+              const candidate = chatIcon.closest('a');
+              if (candidate && candidate.length) chatAnchor = candidate[0];
+            }
+          }
+        } catch (err) {
+          console.warn('[contact-inbox] could not resolve NodeBB chat icon component:', err);
+        }
+        chatAnchor = chatAnchor ||
+          document.querySelector('[component="chat/dropdown"]')?.closest('a') ||
+          document.querySelector('a[href*="/chats"], a[href*="/chat"]');
+        if (!chatAnchor || !chatAnchor.parentNode) return;
+        navNode = chatAnchor.cloneNode(false);
+        navNode.id = 'contact-inbox-nav';
+        navNode.href = page;
+        navNode.removeAttribute('data-bs-toggle');
+        navNode.removeAttribute('data-toggle');
+        navNode.removeAttribute('aria-expanded');
+        navNode.removeAttribute('aria-controls');
+        navNode.title = 'תיבת פניות';
+        navNode.setAttribute('aria-label', 'תיבת פניות');
+        navNode.replaceChildren();
+        const icon = document.createElement('i');
+        icon.className = 'fa fa-envelope-o';
+        icon.setAttribute('aria-hidden', 'true');
+        navNode.appendChild(icon);
+        chatAnchor.parentNode.insertBefore(navNode, chatAnchor);
       }
-      count = Number.isFinite(count) && count > 0 ? count : 0;
-      badge.textContent = count > 99 ? '99+' : String(count);
-      badge.hidden = count === 0;
-      badge.style.display = count === 0 ? 'none' : 'inline-block';
-      navItem.hidden = false;
+      const anchor = navNode.matches('a') ? navNode : navNode.querySelector('a');
+      if (!anchor) return;
+      anchor.href = page;
+      anchor.title = 'תיבת פניות';
+      anchor.setAttribute('aria-label', 'תיבת פניות');
+      const icon = anchor.querySelector('i') || anchor;
+      icon.classList.add('fa', 'fa-envelope-o');
+      icon.classList.remove('fa-envelope');
+      try {
+        let count;
+        try {
+          const result = await request('/unread');
+          count = Number(result.count);
+        } catch (apiError) {
+          const fallback = await request('/submissions?view=active');
+          count = Number(fallback.newCount);
+        }
+        count = Number.isFinite(count) && count > 0 ? count : 0;
+        const countText = count > 99 ? '99+' : String(count);
+        icon.classList.toggle('unread-count', count > 0);
+        icon.setAttribute('data-content', countText);
+        anchor.classList.toggle('unread-count', count > 0);
+        anchor.setAttribute('data-content', countText);
+        anchor.dataset.contactInboxCount = String(count);
+      } catch (err) {
+        console.error('[contact-inbox] could not refresh active submission count:', err);
+      }
     } catch (err) {
-      console.error('[contact-inbox] could not refresh active submission count:', err);
+      console.error('[contact-inbox] could not create inbox navigation icon:', err);
     }
   }
 
   async function notify(message, type) {
     try {
-      const show = alerts => {
-        if (!alerts) return false;
-        if (type === 'success' && typeof alerts.success === 'function') { alerts.success(message, 5000); return true; }
-        if ((type === 'danger' || type === 'error') && typeof alerts.error === 'function') { alerts.error(message, 10000); return true; }
-        if (type === 'warning' && typeof alerts.warning === 'function') { alerts.warning(message, 5000); return true; }
-        if (typeof alerts.info === 'function') { alerts.info(message, 5000); return true; }
-        return false;
-      };
-      const amdRequire = window.require || window.requirejs || (typeof require === 'function' ? require : null);
-      if (typeof amdRequire === 'function') {
-        const alerts = await new Promise((resolve, reject) => {
-          try { amdRequire(['alerts'], resolve, reject); } catch (err) { reject(err); }
-        });
-        const api = alerts && (alerts.default || alerts);
-        if (show(api)) return;
+      if (window.app && typeof window.app.require === 'function') {
+        const alerts = await window.app.require('alerts');
+        if (type === 'success' && typeof alerts.success === 'function') { alerts.success(message, 5000); return; }
+        if ((type === 'danger' || type === 'error') && typeof alerts.error === 'function') { alerts.error(message, 10000); return; }
+        if (type === 'warning' && typeof alerts.warning === 'function') { alerts.warning(message, 5000); return; }
+        if (typeof alerts.info === 'function') { alerts.info(message, 5000); return; }
       }
     } catch (err) {
-      console.error('[contact-inbox] NodeBB toaster notification failed:', err);
+      console.error('[contact-inbox] failed to load NodeBB alerts module:', err);
     }
-    console.error('[contact-inbox] Native NodeBB alerts module is unavailable:', message);
+    console.error('[contact-inbox] NodeBB alerts unavailable:', message);
   }
 
   function modal(title, bodyNode, buttons) {
@@ -291,22 +312,27 @@
         }
         const remove = el('button', 'btn btn-danger', 'מחיקת הפנייה');
         remove.type = 'button';
-        remove.addEventListener('click', async () => {
-          if (!window.confirm('למחוק לצמיתות את הפנייה ואת כל התשובות שלה?')) return;
-          remove.disabled = true;
-          try {
-            const result = await request('/submissions/' + encodeURIComponent(id) + '/delete', { method: 'POST', body: '{}' });
-            if (!result || result.deleted !== true) throw new Error('השרת לא אישר שהפנייה נמחקה בפועל.');
-            activeId = null;
-            detail.replaceChildren(el('p', 'ci-empty', 'הפנייה נמחקה.'));
-            await load();
-            await notify('הפנייה נמחקה בהצלחה.', 'success');
-            window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
-          } catch (err) {
-            await notify(err.message || 'מחיקת הפנייה נכשלה.', 'danger');
-          } finally {
-            remove.disabled = false;
-          }
+        remove.addEventListener('click', () => {
+          const confirmBody = el('p', '', 'למחוק לצמיתות את הפנייה ואת כל התשובות שלה? לא ניתן לשחזר את המידע לאחר המחיקה.');
+          modal('אישור מחיקת פנייה', confirmBody, [
+            { label: 'ביטול', className: 'btn-default' },
+            { label: 'מחיקה לצמיתות', className: 'btn-danger', onClick: async (wrap, button) => {
+              button.disabled = true;
+              try {
+                const result = await request('/submissions/' + encodeURIComponent(id) + '/delete', { method: 'POST', body: '{}' });
+                if (!result || result.deleted !== true) throw new Error('השרת לא אישר שהפנייה נמחקה בפועל.');
+                closeModal(wrap);
+                activeId = null;
+                detail.replaceChildren(el('p', 'ci-empty', 'הפנייה נמחקה.'));
+                await load();
+                await notify('הפנייה נמחקה בהצלחה.', 'success');
+                window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
+              } catch (err) {
+                await notify(err.message || 'מחיקת הפנייה נכשלה.', 'danger');
+                button.disabled = false;
+              }
+            }}
+          ]);
         });
         actions.append(remove); detail.append(actions);
         await load();
