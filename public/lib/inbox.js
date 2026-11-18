@@ -46,7 +46,9 @@
     if (navRefreshInProgress) return;
     navRefreshInProgress = true;
     try {
-      let navNode = document.getElementById('contact-inbox-nav');
+      let navNode = document.getElementById('contact-inbox-nav') ||
+        document.querySelector('a[href="' + page + '"], a[href$="/plugins/contact-inbox"]');
+      if (navNode && navNode.tagName === 'A') navNode.id = 'contact-inbox-nav';
       if (!navNode) {
         // NodeBB exposes the chat icon through its AMD components module.
         // app.require() is for ES modules; components is an AMD module in 4.x.
