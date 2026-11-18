@@ -79,12 +79,14 @@
 }
 
 
-/* Force the compact badge to the screen-facing (physical right) side.
-   Override Bootstrap's RTL logical inset and translate-middle utilities. */
+/* Place the compact badge on the physical right, toward the page interior.
+   Do not use Bootstrap's start-100 / translate-middle utilities here:
+   in RTL they resolve to the opposite physical side. */
 #contact-inbox-nav .ci-nav-count-compact {
+  top: 0 !important;
+  left: calc(100% + 3px) !important;
+  right: auto !important;
   inset-inline-start: auto !important;
   inset-inline-end: auto !important;
-  left: 100% !important;
-  right: auto !important;
-  transform: translate(50%, -50%) !important;
+  transform: translateY(-50%) !important;
 }
