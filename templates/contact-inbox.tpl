@@ -19,11 +19,7 @@
     <section id="ci-history-tools" class="ci-history-tools" hidden>
       <div><strong>היסטוריית פניות שטופלו</strong><p class="text-muted">כאן נשמרות פניות שסומנו כטופלו. קריאת פנייה אינה מעבירה אותה לכאן.</p></div>
       <button id="ci-history-clear" class="btn btn-danger" type="button">מחיקת כל ההיסטוריה</button>
-      <div id="ci-retention-admin" class="ci-retention-admin" hidden>
-        <label for="ci-retention">מחיקה אוטומטית של פניות מההיסטוריה לאחר (ימים; 0 = ללא מחיקה אוטומטית)</label>
-        <div class="ci-retention-row"><input id="ci-retention" class="form-control" type="number" min="0" max="3650" value="0"><button id="ci-retention-save" class="btn btn-default" type="button">שמירת מדיניות</button></div>
-        <p id="ci-retention-message" role="status"></p>
-      </div>
+
     </section>
     <div class="contact-inbox-layout">
       <section id="ci-list" class="contact-inbox-list" aria-label="רשימת פניות" aria-live="polite"><p>טוען פניות…</p></section>
@@ -32,7 +28,7 @@
   </main>
   <main id="ci-settings-page" hidden>
     <h2>הגדרות תיבת הפניות</h2>
-    <p class="text-muted">הגדרות אישיות והגדרות ניהול. הגדרות מחיקת היסטוריה נמצאות במסך היסטוריית הפניות.</p>
+    <p class="text-muted">הגדרות אישיות והגדרות ניהול. כולל הגדרות מחיקת היסטוריית הפניות.</p>
     <div id="ci-settings-content" class="ci-settings-content"><p>טוען הגדרות…</p></div>
   </main>
 </div>
