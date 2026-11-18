@@ -128,15 +128,30 @@
       icon.setAttribute('aria-hidden', 'true');
       icon.style.fontWeight = '400';
 
-      let badge = anchor.querySelector('.ci-nav-badge');
-      if (!badge) {
-        badge = document.createElement('span');
-        badge.className = 'ci-nav-badge badge';
-        badge.setAttribute('aria-hidden', 'true');
-        anchor.appendChild(badge);
+      // Use NodeBB's native collapsed/expanded navigation counter markup.
+      // This gives the badge the same color, shape and responsive placement
+      // as the built-in chat and notification counters.
+      let compactBadge = anchor.querySelector('.ci-nav-count-compact');
+      if (!compactBadge) {
+        compactBadge = document.createElement('span');
+        compactBadge.className = 'ci-nav-count-compact visible-closed position-absolute top-0 start-100 translate-middle badge rounded-1 bg-primary';
+        compactBadge.setAttribute('aria-hidden', 'true');
+        anchor.appendChild(compactBadge);
       }
-      badge.textContent = count > 99 ? '99+' : String(count);
-      badge.hidden = count === 0;
+      let expandedBadge = anchor.querySelector('.ci-nav-count-expanded');
+      if (!expandedBadge) {
+        expandedBadge = document.createElement('span');
+        expandedBadge.className = 'ci-nav-count-expanded visible-open badge rounded-1 bg-primary';
+        expandedBadge.setAttribute('aria-hidden', 'true');
+        anchor.appendChild(expandedBadge);
+      }
+      const countText = count > 99 ? '99+' : String(count);
+      [compactBadge, expandedBadge].forEach(badge => {
+        badge.textContent = countText;
+        badge.classList.toggle('hidden', count === 0);
+      });
+      // Remove the earlier custom badge if this item was already rendered.
+      anchor.querySelectorAll('.ci-nav-badge').forEach(badge => badge.remove());
       anchor.dataset.contactInboxCount = String(count);
     } catch (err) {
       console.error('[contact-inbox] could not update inbox navigation icon:', err);
