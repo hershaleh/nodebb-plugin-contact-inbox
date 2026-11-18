@@ -46,8 +46,10 @@
     if (!item) return;
     const link = item.querySelector('a');
     if (!link) return;
-    const chatAnchor = document.querySelector('#chat-list, a[href*="/chats"], a[href*="/chat"]');
-    const chatItem = chatAnchor && (chatAnchor.closest('li') || chatAnchor);
+    const chatAnchor = document.querySelector(
+      '#chat-list, #chat, #chat-icon, [component="chat"], a[href$="/chats"], a[href*="/user/"][href*="/chats"], a[href*="/chat"]'
+    );
+    const chatItem = chatAnchor && (chatAnchor.closest('li') || chatAnchor.closest('.nav-item') || chatAnchor);
     if (chatItem && chatItem.parentNode && chatItem.parentNode === item.parentNode && chatItem.nextSibling !== item) {
       chatItem.parentNode.insertBefore(item, chatItem.nextSibling);
     }
@@ -71,17 +73,24 @@
 
   async function notify(message, type) {
     try {
-      if (typeof window.require === 'function') {
-        const alerts = await new Promise((resolve, reject) => {
+      // NodeBB 3+ exposes client modules through app.require().
+      // The alerts module renders the native floating toaster notifications.
+      let alerts;
+      if (window.app && typeof window.app.require === 'function') {
+        alerts = await window.app.require('alerts');
+      } else if (typeof window.require === 'function') {
+        alerts = await new Promise((resolve, reject) => {
           window.require(['alerts'], resolve, reject);
         });
-        if (type === 'success' && typeof alerts.success === 'function') return alerts.success(message);
-        if ((type === 'danger' || type === 'error') && typeof alerts.error === 'function') return alerts.error(message);
-        if (type === 'warning' && typeof alerts.warning === 'function') return alerts.warning(message);
-        if (typeof alerts.info === 'function') return alerts.info(message);
+      }
+      if (alerts) {
+        if (type === 'success' && typeof alerts.success === 'function') return alerts.success(message, 5000);
+        if ((type === 'danger' || type === 'error') && typeof alerts.error === 'function') return alerts.error(message, 10000);
+        if (type === 'warning' && typeof alerts.warning === 'function') return alerts.warning(message, 5000);
+        if (typeof alerts.info === 'function') return alerts.info(message, 5000);
       }
     } catch (err) {
-      // Fall back to a local toast if the NodeBB alerts module is unavailable.
+      console.error('[contact-inbox] native NodeBB alert failed:', err);
     }
     let host = document.getElementById('ci-toast-host');
     if (!host) {
@@ -276,8 +285,15 @@
             { label: 'מחיקה לצמיתות', className: 'btn-danger', onClick: async (wrap, button) => {
               button.disabled = true;
               try {
-                await request('/submissions/' + encodeURIComponent(id) + '/delete', { method: 'POST', body: '{}' });
-                closeModal(wrap); activeId = null; detail.replaceChildren(el('p', 'ci-empty', 'הפנייה נמחקה.')); await load(); await notify('הפנייה נמחקה בהצלחה.', 'success');
+                const result = await request('/submissions/' + encodeURIComponent(id) + '/delete', { method: 'POST', body: '{}' });
+                if (!result || result.success !== true || result.deleted !== true || result.id !== id) {
+                  throw new Error('השרת לא אישר שהפנייה נמחקה בפועל.');
+                }
+                closeModal(wrap);
+                activeId = null;
+                detail.replaceChildren(el('p', 'ci-empty', 'הפנייה נמחקה.'));
+                await load();
+                await notify('הפנייה נמחקה בהצלחה.', 'success');
                 window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
               } catch (err) { notify(err.message, 'danger'); button.disabled = false; }
             }}
