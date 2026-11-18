@@ -97,32 +97,31 @@
   }
 
   async function notify(message, type) {
+    // NodeBB 4.x exposes its native floating toaster directly as app.alert.
+    if (window.app && typeof window.app.alert === 'function') {
+      window.app.alert({
+        title: type === 'success' ? 'הצלחה' : (type === 'danger' || type === 'error' ? 'שגיאה' : 'הודעה'),
+        message: String(message || ''),
+        type: type === 'danger' || type === 'error' ? 'danger' : (type || 'info'),
+        location: 'right-top',
+        timeout: type === 'danger' || type === 'error' ? 10000 : 5000,
+      });
+      return;
+    }
     try {
-      const show = alerts => {
-        if (!alerts) return false;
-        if (type === 'success' && typeof alerts.success === 'function') { alerts.success(message, 5000); return true; }
-        if ((type === 'danger' || type === 'error') && typeof alerts.error === 'function') { alerts.error(message, 10000); return true; }
-        if (type === 'warning' && typeof alerts.warning === 'function') { alerts.warning(message, 5000); return true; }
-        if (typeof alerts.info === 'function') { alerts.info(message, 5000); return true; }
-        return false;
-      };
-      // NodeBB 4.15 ships the AMD "alerts" module. Use its actual toaster API.
       const amdRequire = window.require || window.requirejs || (typeof require === 'function' ? require : null);
       if (typeof amdRequire === 'function') {
-        const alerts = await new Promise((resolve, reject) => {
-          try { amdRequire(['alerts'], resolve, reject); } catch (err) { reject(err); }
-        });
+        const alerts = await new Promise((resolve, reject) => amdRequire(['alerts'], resolve, reject));
         const api = alerts && (alerts.default || alerts);
-        if (show(api)) return;
-      }
-      if (window.app && typeof window.app.alert === 'function') {
-        window.app.alert({ title: type === 'success' ? 'הצלחה' : 'הודעה', message, type: type === 'danger' ? 'danger' : type || 'info', timeout: 5000 });
-        return;
+        if (api) {
+          const method = type === 'success' ? 'success' : (type === 'danger' || type === 'error' ? 'error' : type || 'info');
+          if (typeof api[method] === 'function') { api[method](String(message || '')); return; }
+        }
       }
     } catch (err) {
       console.error('[contact-inbox] NodeBB toaster notification failed:', err);
     }
-    console.error('[contact-inbox] Native NodeBB alerts module is unavailable:', message);
+    console.error('[contact-inbox] NodeBB native toaster API is unavailable:', message);
   }
 
   function modal(title, bodyNode, buttons) {
