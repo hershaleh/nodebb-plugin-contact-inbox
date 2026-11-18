@@ -164,7 +164,6 @@ async function notifyStaff(submission) {
 }
 
 async function notifyStaffInApp(submission, cfg) {
-  if (!cfg.notifyStaffInApp) return;
   try {
     const staffUids = new Set();
     for (const groupName of cfg.allowedGroups) {
@@ -175,7 +174,17 @@ async function notifyStaffInApp(submission, cfg) {
         if (Number.isInteger(numericUid) && numericUid > 0) staffUids.add(numericUid);
       });
     }
-    if (!staffUids.size) return;
+    const optedInUids = [];
+    for (const uid of staffUids) {
+      const prefs = await db.getObject(PREFIX + 'staff:' + uid) || {};
+      // Preserve the previous administrator-wide setting for existing staff
+      // until each person explicitly saves their own preference.
+      const enabled = typeof prefs.notifyInForum === 'boolean'
+        ? prefs.notifyInForum
+        : cfg.notifyStaffInApp;
+      if (enabled) optedInUids.push(uid);
+    }
+    if (!optedInUids.length) return;
     const nid = 'contact-inbox:new:' + submission.id;
     let notification = await notifications.get(nid);
     if (!notification) {
@@ -187,7 +196,7 @@ async function notifyStaffInApp(submission, cfg) {
         path: '/plugins/contact-inbox',
       });
     }
-    if (notification) await notifications.push(notification, [...staffUids]);
+    if (notification) await notifications.push(notification, optedInUids);
   } catch (err) {
     console.error('[contact-inbox] staff in-app notification failed:', err.message);
   }
@@ -459,17 +468,27 @@ async function unread(req, res) {
 
 async function saveStaffPrefs(req, res) {
   const notify = req.body?.notify === true;
+  const notifyInForum = req.body?.notifyInForum === true;
   const extraEmails = Array.isArray(req.body?.extraEmails)
     ? [...new Set(req.body.extraEmails.map(value => clean(value, 254).toLowerCase()).filter(Boolean))].slice(0, 20)
     : [];
   if (extraEmails.some(email => !validEmail(email))) return send(res, 400, { error: 'אחת מכתובות הדוא״ל הנוספות אינה תקינה' });
-  await db.setObject(PREFIX + 'staff:' + req.uid, { notify, extraEmails });
+  const current = await db.getObject(PREFIX + 'staff:' + req.uid) || {};
+  await db.setObject(PREFIX + 'staff:' + req.uid, { ...current, notify, notifyInForum, extraEmails });
   return send(res, 200, { success: true });
 }
 
 async function getStaffPrefs(req, res) {
-  const prefs = await db.getObject(PREFIX + 'staff:' + req.uid) || { notify: false, extraEmails: [] };
-  return send(res, 200, { preferences: { notify: !!prefs.notify, extraEmails: Array.isArray(prefs.extraEmails) ? prefs.extraEmails : [] } });
+  const prefs = await db.getObject(PREFIX + 'staff:' + req.uid) || {};
+  const cfg = await config();
+  const notifyInForum = typeof prefs.notifyInForum === 'boolean'
+    ? prefs.notifyInForum
+    : cfg.notifyStaffInApp;
+  return send(res, 200, { preferences: {
+    notify: !!prefs.notify,
+    notifyInForum,
+    extraEmails: Array.isArray(prefs.extraEmails) ? prefs.extraEmails : [],
+  } });
 }
 
 async function getGroups(req, res) {
