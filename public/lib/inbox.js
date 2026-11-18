@@ -302,7 +302,7 @@
     };
     function updateHeader(data) {
       count.textContent = view === 'active'
-        ? 'פניות חדשות: ' + (Number(data.newCount) || 0)
+        ? 'פניות שלא נקראו: ' + (Number(data.newCount) || 0)
         : 'בהיסטוריה: ' + (Number(data.historyCount) || 0);
       historyButton.textContent = view === 'active' ? 'היסטוריית פניות' : 'חזרה לפניות חדשות';
       historyButton.classList.toggle('active', view === 'history');
@@ -316,150 +316,110 @@
         render(data.submissions || []);
       } catch (err) { list.textContent = err.message; }
     }
+    async function markReadState(item, unread) {
+      await request('/submissions/' + encodeURIComponent(item.id) + '/' + (unread ? 'unread' : 'read'), { method: 'POST', body: '{}' });
+      await load(); if (activeId === item.id) await openItem(item.id);
+      window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
+      await notify(unread ? 'הפנייה סומנה כלא נקראה עבורך.' : 'הפנייה סומנה כנקראה עבורך.', 'success');
+    }
+    async function openChat(item) {
+      const data = await request('/submissions/' + encodeURIComponent(item.id) + '/chat', { method: 'POST', body: '{}' });
+      if (!data.url) throw new Error('לא התקבל קישור לצ׳אט');
+      window.location.assign(data.url);
+    }
+    function emailReply(item) {
+      const body = el('div'); body.append(el('p', 'text-muted', 'התשובה תישלח אל: ' + item.email));
+      const textarea = el('textarea', 'form-control'); textarea.rows = 6; textarea.placeholder = 'כתיבת תשובה…'; body.append(textarea);
+      modal('שליחת תשובה בדוא״ל', body, [
+        { label: 'ביטול', className: 'btn-default' },
+        { label: 'שליחה', className: 'btn-primary', onClick: async (wrap, button) => {
+          if (!textarea.value.trim()) { notify('יש לכתוב את תוכן התשובה.', 'warning'); return; }
+          button.disabled = true;
+          try {
+            await request('/submissions/' + encodeURIComponent(item.id) + '/replies', { method: 'POST', body: JSON.stringify({ message: textarea.value, sendEmail: true }) });
+            closeModal(wrap); await openItem(item.id); await notify('התשובה נשלחה ונשמרה בהיסטוריה.', 'success');
+          } catch (err) { await notify(err.message, 'danger'); button.disabled = false; }
+        }},
+      ]);
+    }
+    async function setStatus(item, status) {
+      await request('/submissions/' + encodeURIComponent(item.id), { method: 'PUT', body: JSON.stringify({ status }) });
+      activeId = null; detail.replaceChildren(el('p', 'ci-empty', status === 'resolved' ? 'הפנייה הועברה להיסטוריה.' : 'הפנייה הוחזרה לפניות הפעילות.'));
+      await load(); window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
+      await notify(status === 'resolved' ? 'הפנייה סומנה כטופלה והועברה להיסטוריה.' : 'הפנייה סומנה כלא טופלה והוחזרה לתיבה כלא נקראה.', 'success');
+    }
+    function deleteItem(item) {
+      modal('אישור מחיקת פנייה', el('p', '', 'למחוק לצמיתות את הפנייה ואת כל התשובות שלה? לא ניתן לשחזר את המידע לאחר המחיקה.'), [
+        { label: 'ביטול', className: 'btn-default' },
+        { label: 'מחיקה לצמיתות', className: 'btn-danger', onClick: async (wrap, button) => {
+          button.disabled = true;
+          try {
+            const result = await request('/submissions/' + encodeURIComponent(item.id) + '/delete', { method: 'POST', body: '{}' });
+            if (!result || result.deleted !== true) throw new Error('השרת לא אישר שהפנייה נמחקה בפועל.');
+            closeModal(wrap); if (activeId === item.id) { activeId = null; detail.replaceChildren(el('p', 'ci-empty', 'הפנייה נמחקה.')); }
+            await load(); await notify('הפנייה נמחקה בהצלחה.', 'success'); window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
+          } catch (err) { await notify(err.message, 'danger'); button.disabled = false; }
+        }},
+      ]);
+    }
+    function addMenuAction(menu, label, icon, action, disabled) {
+      const button = el('button', 'ci-menu-item'); button.type = 'button'; button.disabled = !!disabled;
+      const glyph = el('i', 'fa ' + icon); glyph.setAttribute('aria-hidden', 'true'); button.append(glyph, el('span', '', label));
+      button.addEventListener('click', async event => { event.stopPropagation(); if (button.disabled) return; menu.hidden = true; try { await action(); } catch (err) { await notify(err.message, 'danger'); } });
+      menu.append(button);
+    }
+    function cardMenu(item) {
+      const wrap = el('div', 'ci-card-menu'), trigger = el('button', 'ci-menu-trigger', '⋮'), menu = el('div', 'ci-menu');
+      trigger.type = 'button'; trigger.setAttribute('aria-label', 'פעולות לפנייה'); trigger.setAttribute('aria-haspopup', 'true'); trigger.setAttribute('aria-expanded', 'false');
+      menu.hidden = true;
+      trigger.addEventListener('click', event => {
+        event.stopPropagation(); const opening = menu.hidden;
+        document.querySelectorAll('.ci-menu').forEach(node => { node.hidden = true; });
+        document.querySelectorAll('.ci-menu-trigger').forEach(node => node.setAttribute('aria-expanded', 'false'));
+        menu.hidden = !opening; trigger.setAttribute('aria-expanded', String(opening));
+      });
+      menu.addEventListener('click', event => event.stopPropagation());
+      if (view === 'active') {
+        addMenuAction(menu, item.readByMe ? 'סימון כלא נקרא' : 'סימון כנקרא', item.readByMe ? 'fa-envelope' : 'fa-envelope-open', () => markReadState(item, item.readByMe));
+        addMenuAction(menu, 'שליחת צ׳אט למשתמש', 'fa-comments', () => openChat(item), !item.uid || !item.username);
+        addMenuAction(menu, 'שליחת תשובה במייל', 'fa-envelope', () => emailReply(item), !settings || !settings.smtpConfigured);
+        addMenuAction(menu, 'סימון כטופל', 'fa-check', () => setStatus(item, 'resolved'));
+        addMenuAction(menu, 'מחיקה', 'fa-trash', () => deleteItem(item));
+      } else {
+        addMenuAction(menu, 'סמן כלא טופל', 'fa-rotate-left', () => setStatus(item, 'new'));
+        addMenuAction(menu, 'מחיקה', 'fa-trash', () => deleteItem(item));
+      }
+      wrap.append(trigger, menu); return wrap;
+    }
     function render(items) {
       list.replaceChildren();
-      if (!items.length) {
-        list.append(el('div', 'ci-empty', view === 'history' ? 'אין פניות בהיסטוריה.' : 'אין פניות חדשות.'));
-        return;
-      }
+      if (!items.length) { list.append(el('div', 'ci-empty', view === 'history' ? 'אין פניות בהיסטוריה.' : 'אין פניות התואמות לסינון.')); return; }
       items.forEach(item => {
-        const button = el('button', 'ci-row' + (item.id === activeId ? ' active' : '') + (view === 'active' && !item.readByMe ? ' ci-row-unread' : ''), '');
-        button.type = 'button';
-        const top = el('div', 'ci-row-top');
-        top.append(el('strong', '', item.subject), el('small', '', date(item.createdAt)));
-        button.append(top, el('div', 'ci-row-meta', item.name + ' · ' + item.email));
-        button.append(el('p', 'ci-row-preview', item.message));
-        if (item.status === 'in_progress') button.append(el('span', 'label label-info', 'בטיפול'));
-        button.addEventListener('click', () => openItem(item.id));
-        list.append(button);
+        const card = el('article', 'ci-row' + (item.id === activeId ? ' active' : '') + (view === 'active' && !item.readByMe ? ' ci-row-unread' : ''));
+        card.tabIndex = 0; card.setAttribute('role', 'button'); card.setAttribute('aria-label', 'פתיחת פנייה: ' + item.subject);
+        const top = el('div', 'ci-row-top'); top.append(el('strong', '', item.subject), el('small', '', date(item.createdAt)));
+        card.append(top, el('div', 'ci-row-meta', item.name + ' · ' + item.email), el('p', 'ci-row-preview', item.message));
+        if (view === 'history') card.append(el('span', 'label label-default', 'טופלה'));
+        else card.append(el('span', 'ci-read-state' + (item.readByMe ? '' : ' ci-unread-state'), item.readByMe ? 'נקראה' : 'לא נקראה'));
+        card.append(cardMenu(item));
+        card.addEventListener('click', event => { if (!event.target.closest('.ci-card-menu')) openItem(item.id); });
+        card.addEventListener('keydown', event => { if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('.ci-card-menu')) { event.preventDefault(); openItem(item.id); } });
+        list.append(card);
       });
     }
     async function openItem(id) {
       activeId = id;
       try {
-        const result = await request('/submissions/' + encodeURIComponent(id));
-        const item = result.submission;
-        detail.replaceChildren();
-        detail.append(el('h2', 'ci-subject', item.subject));
-        detail.append(field('פרטי הפונה', item.name + ' · ' + item.email, 'ci-person'));
-        detail.append(field('תאריך קבלה', date(item.createdAt)));
+        const result = await request('/submissions/' + encodeURIComponent(id)), item = result.submission;
+        detail.replaceChildren(); detail.append(el('h2', 'ci-subject', item.subject));
+        detail.append(field('פרטי הפונה', item.name + ' · ' + item.email, 'ci-person'), field('תאריך קבלה', date(item.createdAt)));
         if (item.username) detail.append(field('חשבון בפורום', '@' + item.username));
         detail.append(field('תוכן הפנייה', item.message, 'ci-message-card'));
         if (item.replies && item.replies.length) {
-          const history = el('section', 'ci-replies');
-          history.append(el('h3', '', 'תשובות קודמות'));
-          item.replies.forEach(reply => {
-            const card = el('article', 'ci-reply');
-            card.append(el('small', '', date(reply.createdAt) + (reply.channel === 'email' ? ' · נשלח בדוא״ל' : ' · תשובה פנימית')));
-            card.append(el('p', '', reply.message)); history.append(card);
-          });
+          const history = el('section', 'ci-replies'); history.append(el('h3', '', 'תשובות קודמות'));
+          item.replies.forEach(reply => { const card = el('article', 'ci-reply'); card.append(el('small', '', date(reply.createdAt) + (reply.channel === 'email' ? ' · נשלח בדוא״ל' : ' · תשובה פנימית')), el('p', '', reply.message)); history.append(card); });
           detail.append(history);
         }
-        const actions = el('div', 'ci-actions');
-        if (view === 'active' && !item.readByMe) {
-          const markRead = el('button', 'btn btn-default', 'סמן כנקרא');
-          markRead.type = 'button';
-          markRead.title = 'הפנייה תישאר פתוחה וזמינה לשאר חברי הצוות, אך לא תיספר כחדשה עבורך.';
-          markRead.addEventListener('click', async () => {
-            markRead.disabled = true;
-            try {
-              await request('/submissions/' + encodeURIComponent(id) + '/read', { method: 'POST', body: '{}' });
-              await openItem(id);
-              window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
-              await notify('הפנייה סומנה כנקראה עבורך. היא נשארה פתוחה לטיפול של הצוות.', 'success');
-            } catch (err) {
-              await notify(err.message || 'לא ניתן לסמן את הפנייה כנקראה.', 'danger');
-              markRead.disabled = false;
-            }
-          });
-          actions.append(markRead);
-        }
-        const chat = el('button', 'btn btn-default', 'התחלת צ׳אט עם המשתמש');
-        chat.type = 'button'; chat.disabled = !item.uid || !item.username;
-        chat.title = chat.disabled ? 'הפנייה לא משויכת לחשבון משתמש בפורום' : '';
-        chat.addEventListener('click', async () => {
-          chat.disabled = true;
-          try {
-            const data = await request('/submissions/' + encodeURIComponent(id) + '/chat', { method: 'POST', body: '{}' });
-            if (!data.url) throw new Error('לא התקבל קישור לצ׳אט');
-            window.location.assign(data.url);
-          } catch (err) { notify(err.message, 'danger'); chat.disabled = false; }
-        });
-        actions.append(chat);
-        const email = el('button', 'btn btn-primary', 'שליחת תשובה מדוא״ל הפורום');
-        email.type = 'button'; email.disabled = !settings || !settings.emailReplies || !settings.smtpConfigured;
-        email.title = email.disabled ? 'יש להפעיל תשובות בדוא״ל ולהגדיר SMTP וכתובת שולח' : '';
-        email.addEventListener('click', () => {
-          const form = document.createElement('div');
-          form.append(el('p', 'text-muted', 'התשובה תישלח אל: ' + item.email));
-          const textarea = el('textarea', 'form-control'); textarea.rows = 6; textarea.placeholder = 'כתיבת תשובה…'; form.append(textarea);
-          modal('שליחת תשובה בדוא״ל', form, [
-            { label: 'ביטול', className: 'btn-default' },
-            { label: 'שליחה', className: 'btn-primary', onClick: async (wrap, button) => {
-              if (!textarea.value.trim()) { notify('יש לכתוב את תוכן התשובה.', 'warning'); return; }
-              button.disabled = true;
-              try {
-                await request('/submissions/' + encodeURIComponent(id) + '/replies', { method: 'POST', body: JSON.stringify({ message: textarea.value, sendEmail: true }) });
-                closeModal(wrap); await openItem(id); notify('התשובה נשלחה ונשמרה בהיסטוריה.', 'success');
-              } catch (err) { notify(err.message, 'danger'); button.disabled = false; }
-            }}
-          ]);
-        });
-        actions.append(email);
-        if (view === 'history') {
-          const reopen = el('button', 'btn btn-warning', 'סמן כלא טופל');
-          reopen.type = 'button';
-          reopen.addEventListener('click', async () => {
-            reopen.disabled = true;
-            try {
-              await request('/submissions/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify({ status: 'new' }) });
-              activeId = null;
-              detail.replaceChildren(el('p', 'ci-empty', 'הפנייה הוחזרה לפניות הפעילות.'));
-              await load();
-              await notify('הפנייה סומנה כלא טופלה והוחזרה לפניות הפעילות.', 'success');
-              window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
-            } catch (err) { await notify(err.message, 'danger'); reopen.disabled = false; }
-          });
-          actions.append(reopen);
-        }
-        if (view === 'active') {
-          const done = el('button', 'btn btn-success', 'סמן כטופל');
-          done.type = 'button';
-          done.addEventListener('click', async () => {
-            done.disabled = true;
-            try {
-              await request('/submissions/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify({ status: 'resolved' }) });
-              activeId = null; detail.replaceChildren(el('p', 'ci-empty', 'הפנייה הועברה להיסטוריה.')); await load(); await notify('הפנייה סומנה כטופלה והועברה להיסטוריה.', 'success');
-              window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
-            } catch (err) { notify(err.message, 'danger'); done.disabled = false; }
-          });
-          actions.append(done);
-        }
-        const remove = el('button', 'btn btn-danger', 'מחיקת הפנייה');
-        remove.type = 'button';
-        remove.addEventListener('click', () => {
-          const confirmBody = el('p', '', 'למחוק לצמיתות את הפנייה ואת כל התשובות שלה? לא ניתן לשחזר את המידע לאחר המחיקה.');
-          modal('אישור מחיקת פנייה', confirmBody, [
-            { label: 'ביטול', className: 'btn-default' },
-            { label: 'מחיקה לצמיתות', className: 'btn-danger', onClick: async (wrap, button) => {
-              button.disabled = true;
-              try {
-                const result = await request('/submissions/' + encodeURIComponent(id) + '/delete', { method: 'POST', body: '{}' });
-                if (!result || result.deleted !== true) throw new Error('השרת לא אישר שהפנייה נמחקה בפועל.');
-                closeModal(wrap);
-                activeId = null;
-                detail.replaceChildren(el('p', 'ci-empty', 'הפנייה נמחקה.'));
-                await load();
-                await notify('הפנייה נמחקה בהצלחה.', 'success');
-                window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
-              } catch (err) {
-                await notify(err.message || 'מחיקת הפנייה נכשלה.', 'danger');
-                button.disabled = false;
-              }
-            }}
-          ]);
-        });
-        actions.append(remove); detail.append(actions);
         await load();
       } catch (err) { detail.textContent = err.message; }
     }
@@ -476,7 +436,7 @@
 
     async function loadSettings() {
       const caps = await request('/capabilities');
-      settings = { emailReplies: !!caps.emailReplies, smtpConfigured: !!caps.smtpConfigured };
+      settings = { smtpConfigured: !!caps.smtpConfigured };
       isAdmin = !!caps.isAdmin;
       if (isAdmin) {
         const data = await request('/settings');
@@ -488,99 +448,53 @@
     });
 
     async function renderSettingsPage() {
-      const inboxPage = document.getElementById('ci-inbox-page');
-      const settingsPage = document.getElementById('ci-settings-page');
-      if (!settingsPage) return;
-      if (inboxPage) inboxPage.hidden = true;
-      settingsPage.hidden = false;
+      const inboxPage = document.getElementById('ci-inbox-page'), settingsPage = document.getElementById('ci-settings-page');
+      if (!settingsPage) return; if (inboxPage) inboxPage.hidden = true; settingsPage.hidden = false;
       root.querySelector('h1').textContent = 'הגדרות תיבת הפניות';
-      historyButton.hidden = true;
-      settingsButton.hidden = true;
-      document.getElementById('ci-back-button').hidden = false;
-      const content = document.getElementById('ci-settings-content');
-      content.replaceChildren(el('p', '', 'טוען הגדרות…'));
+      historyButton.hidden = true; settingsButton.hidden = true; document.getElementById('ci-back-button').hidden = false;
+      const content = document.getElementById('ci-settings-content'); content.replaceChildren(el('p', '', 'טוען הגדרות…'));
       await loadSettings();
       const form = el('div', 'ci-settings-form');
       if (isAdmin) {
-        const groupsLabel = el('label', '', 'קבוצות מורשות');
-        const groupsWrap = el('div', 'ci-groups-list');
-        const groupData = await request('/groups');
-        const selected = new Set(settings.allowedGroups || ['administrators']);
-        (groupData.groups || []).forEach(name => {
-          const label = el('label', 'checkbox ci-group-option', name);
-          const input = el('input');
-          input.type = 'checkbox';
-          input.value = name;
-          input.checked = selected.has(name);
-          label.prepend(input);
-          groupsWrap.append(label);
-        });
-        const rateLabel = el('label', '', 'מספר פניות מרבי מכתובת IP בשעה');
-        const rateInput = el('input', 'form-control'); rateInput.type = 'number'; rateInput.min = '1'; rateInput.max = '30'; rateInput.value = settings.maxPerHour || 5;
-        const repliesLabel = el('label', 'checkbox', 'אפשר שליחת תשובות בדוא״ל'); const repliesInput = el('input'); repliesInput.type = 'checkbox'; repliesInput.checked = !!settings.emailReplies; repliesLabel.prepend(repliesInput);
-        const smtpWarning = !settings.smtpConfigured
-          ? el('p', 'text-muted ci-smtp-warning', 'שליחת הדוא״ל של NodeBB אינה פעילה כרגע. לאחר הפעלת SMTP בהגדרות הדוא״ל של NodeBB, האזהרה תיעלם אוטומטית.')
-          : null;
-        const repliesSetting = el('div', 'ci-email-replies-setting');
-        repliesSetting.append(repliesLabel);
-        if (smtpWarning) repliesSetting.append(smtpWarning);
-        const retentionLabel = el('label', '', 'מחיקה אוטומטית של פניות מההיסטוריה לאחר (ימים; 0 = ללא מחיקה אוטומטית)');
-        const retentionInput = el('input', 'form-control'); retentionInput.type = 'number'; retentionInput.min = '0'; retentionInput.max = '3650'; retentionInput.value = settings.retentionDays || 0;
-        const submitterNotifyLabel = el('label', 'checkbox', 'שליחת התראת אישור למשתמש רשום לאחר שליחת פנייה');
-        const submitterNotifyInput = el('input'); submitterNotifyInput.type = 'checkbox'; submitterNotifyInput.checked = !!settings.notifySubmitter; submitterNotifyLabel.prepend(submitterNotifyInput);
-        const submitterDelayLabel = el('label', '', 'השהיה לפני שליחת ההתראה (בדקות)');
-        const submitterDelayInput = el('input', 'form-control'); submitterDelayInput.type = 'number'; submitterDelayInput.min = '1'; submitterDelayInput.max = '10080'; submitterDelayInput.step = '1'; submitterDelayInput.value = settings.submitterNotificationDelayMinutes || 5;
-        form.append(el('h3', '', 'הגדרות מנהל'), groupsLabel, groupsWrap, rateLabel, rateInput, repliesSetting,
-          retentionLabel, retentionInput,
-          el('h4', '', 'התראת אישור לפונה'), submitterNotifyLabel, submitterDelayLabel, submitterDelayInput,
-          el('p', 'text-muted', 'ההתראה תופיע בדף ההתראות הרגיל של המשתמש, לאחר ההשהיה שנקבעה. אורחים לא יקבלו התראה זו.'));
-        form.dataset.adminSettings = '1';
-        form._adminFields = { groupsWrap, rateInput, repliesInput, retentionInput, submitterNotifyInput, submitterDelayInput };
+        const general = el('section', 'ci-settings-section'); general.append(el('h3', '', 'הגדרות'));
+        const groupsLabel = el('label', '', 'קבוצות מורשות'), groupsWrap = el('div', 'ci-groups-list');
+        const groupData = await request('/groups'), selected = new Set(settings.allowedGroups || ['administrators']);
+        (groupData.groups || []).forEach(name => { const label = el('label', 'checkbox ci-group-option', name), input = el('input'); input.type = 'checkbox'; input.value = name; input.checked = selected.has(name); label.prepend(input); groupsWrap.append(label); });
+        const rateLabel = el('label', '', 'מספר פניות מרבי מכתובת IP בשעה'), rateInput = el('input', 'form-control');
+        rateInput.type = 'number'; rateInput.min = '1'; rateInput.max = '30'; rateInput.value = settings.maxPerHour || 5;
+        const retentionLabel = el('label', '', 'מחיקה אוטומטית של פניות מההיסטוריה לאחר (ימים; 0 = ללא מחיקה אוטומטית)'), retentionInput = el('input', 'form-control');
+        retentionInput.type = 'number'; retentionInput.min = '0'; retentionInput.max = '3650'; retentionInput.value = settings.retentionDays || 0;
+        general.append(groupsLabel, groupsWrap, rateLabel, rateInput, retentionLabel, retentionInput); form.append(general);
+        form._adminFields = { groupsWrap, rateInput, retentionInput };
       }
-      const prefs = el('section', 'ci-personal-prefs');
-      prefs.append(el('h3', '', 'העדפות התראות אישיות'));
-      const forumNotify = el('input', 'form-check-input'); forumNotify.type = 'checkbox';
-      const forumLabel = el('label', 'form-check form-switch ci-notify-switch', 'קבלת התראות בפורום על פנייה');
-      forumLabel.prepend(forumNotify);
-      const personalNotify = el('input', 'form-check-input'); personalNotify.type = 'checkbox';
-      const personalLabel = el('label', 'form-check form-switch ci-notify-switch', 'קבלת התראות דוא״ל לכתובת שבחשבון שלי');
-      personalLabel.prepend(personalNotify);
-      const extraEmails = el('div', 'ci-extra-emails');
-      const addEmail = el('button', 'btn btn-default', '+ הוספת כתובת דוא״ל נוספת'); addEmail.type = 'button';
-      function addEmailField(value) {
-        const row = el('div', 'ci-extra-email-row');
-        const input = el('input', 'form-control'); input.type = 'email'; input.placeholder = 'כתובת דוא״ל נוספת'; input.value = value || '';
-        const remove = el('button', 'btn btn-default', 'הסרה'); remove.type = 'button';
-        remove.addEventListener('click', () => row.remove());
-        row.append(input, remove); extraEmails.append(row);
-      }
-      addEmail.addEventListener('click', () => addEmailField(''));
-      prefs.append(forumLabel, personalLabel, extraEmails, addEmail); form.append(prefs);
+      const alerts = el('section', 'ci-settings-section'); alerts.append(el('h3', '', 'התראות'));
+      const submitter = el('div', 'ci-settings-subsection'); submitter.append(el('h4', '', 'התראת אישור לפונה'));
+      const submitterLabel = el('label', 'checkbox ci-setting-checkbox', 'שליחת התראת אישור למשתמש רשום לאחר שליחת פנייה'), submitterInput = el('input');
+      submitterInput.type = 'checkbox'; submitterInput.checked = !!(settings && settings.notifySubmitter); submitterLabel.prepend(submitterInput);
+      const delayLabel = el('label', '', 'השהיה לפני שליחת ההתראה (בדקות)'), delayInput = el('input', 'form-control');
+      delayInput.type = 'number'; delayInput.min = '1'; delayInput.max = '10080'; delayInput.step = '1'; delayInput.value = (settings && settings.submitterNotificationDelayMinutes) || 5;
+      submitter.append(submitterLabel, delayLabel, delayInput, el('p', 'text-muted', 'ההתראה תופיע בדף ההתראות הרגיל של המשתמש, לאחר ההשהיה שנקבעה. אורחים לא יקבלו התראה זו.'));
+      alerts.append(submitter);
+      const prefs = el('div', 'ci-settings-subsection ci-personal-prefs'); prefs.append(el('h4', '', 'התראות לצוות'));
       const p = await request('/preferences');
-      forumNotify.checked = !!p.preferences.notifyInForum;
-      personalNotify.checked = !!p.preferences.notify;
-      (p.preferences.extraEmails || []).forEach(addEmailField);
+      const forumInput = el('input', 'form-check-input'); forumInput.type = 'checkbox'; forumInput.checked = !!p.preferences.notifyInForum;
+      const forumLabel = el('label', 'form-check form-switch ci-notify-switch', 'קבלת התראות בפורום'); forumLabel.prepend(forumInput);
+      const emailInput = el('input', 'form-check-input'); emailInput.type = 'checkbox'; emailInput.checked = !!p.preferences.notify;
+      const emailLabel = el('label', 'form-check form-switch ci-notify-switch', 'קבלת התראות בדוא״ל לכתובת שבחשבון שלי'); emailLabel.prepend(emailInput);
+      const extraEmails = el('div', 'ci-extra-emails'), addEmail = el('button', 'btn btn-default', '+ הוספת כתובת דוא״ל נוספת'); addEmail.type = 'button';
+      function addEmailField(value) { const row = el('div', 'ci-extra-email-row'), input = el('input', 'form-control'), remove = el('button', 'btn btn-default', 'הסרה'); input.type = 'email'; input.placeholder = 'כתובת דוא״ל נוספת'; input.value = value || ''; remove.type = 'button'; remove.addEventListener('click', () => row.remove()); row.append(input, remove); extraEmails.append(row); }
+      addEmail.addEventListener('click', () => addEmailField('')); (p.preferences.extraEmails || []).forEach(addEmailField);
+      prefs.append(forumLabel, emailLabel, extraEmails, addEmail); alerts.append(prefs); form.append(alerts);
       const save = el('button', 'btn btn-primary', 'שמירת הגדרות'); save.type = 'button';
       save.addEventListener('click', async () => {
         save.disabled = true;
         try {
-          await request('/preferences', { method: 'PUT', body: JSON.stringify({ notifyInForum: forumNotify.checked, notify: personalNotify.checked, extraEmails: Array.from(extraEmails.querySelectorAll('input')).map(input => input.value.trim()).filter(Boolean) }) });
-          if (isAdmin && form._adminFields) {
-            const f = form._adminFields;
-            await request('/settings', { method: 'PUT', body: JSON.stringify({
-              allowedGroups: Array.from(f.groupsWrap.querySelectorAll('input:checked')).map(input => input.value),
-              maxPerHour: Number(f.rateInput.value), retentionDays: Number(f.retentionInput.value) || 0,
-              emailReplies: f.repliesInput.checked,
-              notifySubmitter: f.submitterNotifyInput.checked,
-              submitterNotificationDelayMinutes: Number(f.submitterDelayInput.value) || 5
-            }) });
-          }
+          await request('/preferences', { method: 'PUT', body: JSON.stringify({ notifyInForum: forumInput.checked, notify: emailInput.checked, extraEmails: Array.from(extraEmails.querySelectorAll('input')).map(input => input.value.trim()).filter(Boolean) }) });
+          if (isAdmin && form._adminFields) { const f = form._adminFields; await request('/settings', { method: 'PUT', body: JSON.stringify({ allowedGroups: Array.from(f.groupsWrap.querySelectorAll('input:checked')).map(input => input.value), maxPerHour: Number(f.rateInput.value), retentionDays: Number(f.retentionInput.value) || 0, notifySubmitter: submitterInput.checked, submitterNotificationDelayMinutes: Number(delayInput.value) || 5 }) }); }
           await notify('ההגדרות נשמרו.', 'success');
-        } catch (err) { await notify(err.message, 'danger'); }
-        finally { save.disabled = false; }
+        } catch (err) { await notify(err.message, 'danger'); } finally { save.disabled = false; }
       });
-      form.append(save);
-      content.replaceChildren(form);
+      form.append(save); content.replaceChildren(form);
     }
     document.getElementById('ci-history-clear').addEventListener('click', () => {
       modal('מחיקת היסטוריית הפניות', el('p', '', 'למחוק לצמיתות את כל הפניות שסומנו כטופלו ואת היסטוריית התשובות שלהן?'), [
@@ -598,7 +512,7 @@
       document.getElementById('ci-history-tools').hidden = view !== 'history';
       document.getElementById('ci-history-button').textContent = view === 'history' ? 'חזרה לפניות פעילות' : 'היסטוריית פניות';
       document.getElementById('ci-back-button').hidden = true;
-      load();
+      loadSettings().then(load).catch(err => { list.textContent = err.message; });
     }
   }
 
