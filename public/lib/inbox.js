@@ -117,16 +117,33 @@
       anchor.setAttribute('aria-label', 'תיבת פניות');
       anchor.classList.add('ci-nav-anchor');
 
-      // Font Awesome 7's regular envelope is the outline-only variant.
-      let icon = anchor.querySelector('i');
+      // Use a self-contained outline SVG so the icon never depends on a
+      // Font Awesome font being present or loaded by the active theme.
+      let icon = anchor.querySelector('svg.ci-nav-envelope');
       if (!icon) {
-        icon = document.createElement('i');
+        anchor.querySelectorAll('i').forEach(oldIcon => oldIcon.remove());
+        icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.classList.add('ci-nav-envelope');
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('width', '20');
+        icon.setAttribute('height', '20');
+        icon.setAttribute('fill', 'none');
+        icon.setAttribute('stroke', 'currentColor');
+        icon.setAttribute('stroke-width', '1.8');
+        icon.setAttribute('stroke-linecap', 'round');
+        icon.setAttribute('stroke-linejoin', 'round');
+        icon.setAttribute('aria-hidden', 'true');
+        const outline = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        outline.setAttribute('x', '3');
+        outline.setAttribute('y', '5');
+        outline.setAttribute('width', '18');
+        outline.setAttribute('height', '14');
+        outline.setAttribute('rx', '2');
+        const flap = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        flap.setAttribute('d', 'm3 7 9 7 9-7');
+        icon.append(outline, flap);
         anchor.insertBefore(icon, anchor.firstChild);
       }
-      icon.classList.remove('fa', 'fa-solid', 'fa-envelope-o', 'fa-envelope');
-      icon.classList.add('fa-regular', 'fa-envelope');
-      icon.setAttribute('aria-hidden', 'true');
-      icon.style.fontWeight = '400';
 
       // Use NodeBB's native collapsed/expanded navigation counter markup.
       // This gives the badge the same color, shape and responsive placement
@@ -150,6 +167,14 @@
         badge.textContent = countText;
         badge.classList.toggle('hidden', count === 0);
       });
+      // Inline physical offsets deliberately override Bootstrap RTL utilities.
+      compactBadge.style.position = 'absolute';
+      compactBadge.style.left = 'calc(100% + 3px)';
+      compactBadge.style.right = 'auto';
+      compactBadge.style.top = '0';
+      compactBadge.style.transform = 'translateY(-50%)';
+      compactBadge.style.insetInlineStart = 'auto';
+      compactBadge.style.insetInlineEnd = 'auto';
       // Remove the earlier custom badge if this item was already rendered.
       anchor.querySelectorAll('.ci-nav-badge').forEach(badge => badge.remove());
       anchor.dataset.contactInboxCount = String(count);
