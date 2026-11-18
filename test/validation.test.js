@@ -153,6 +153,9 @@ test('forum navigation uses NodeBB native navigation hook and floating alerts mo
   assert.ok(client.includes("window.require(['alerts']"));
   assert.ok(client.includes("alerts.success(message, 5000)"));
   assert.ok(client.includes('function refreshNavigationIcon()'));
+  assert.ok(client.includes("link.closest('li')"));
+  assert.ok(client.includes("#logged-in-menu > li.chats, #chat_dropdown"));
+  assert.ok(client.includes("chatItem.parentNode.insertBefore(navItem, chatItem)"));
 });
 
 test('successful status and retention actions display native success notifications', () => {
