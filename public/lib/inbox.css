@@ -68,3 +68,6 @@
 
 .ci-settings-content{max-width:760px;padding:16px;border:1px solid var(--bs-border-color,#ddd);border-radius:12px;background:var(--bs-body-bg,#fff)}.ci-settings-form>label{display:block;margin:14px 0 6px;font-weight:600}.ci-settings-form>.form-control{width:100%;max-width:100%;margin:6px 0 14px}.ci-settings-form label.checkbox{display:flex;align-items:center;gap:9px;margin:14px 0}.ci-settings-form label.checkbox input{margin:0}.ci-settings-form .btn{margin-top:18px}#ci-settings-page h2{margin-top:0;margin-bottom:8px}
 .ci-groups-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px 14px;padding:10px 12px;border:1px solid var(--bs-border-color,#ddd);border-radius:8px;max-height:260px;overflow:auto}.ci-groups-list .ci-group-option{display:flex;align-items:center;gap:8px;margin:3px 0}.ci-extra-emails{display:grid;gap:8px;margin:10px 0}.ci-extra-email-row{display:flex;gap:8px;align-items:center}.ci-extra-email-row input{flex:1}.ci-personal-prefs>label{display:flex;align-items:center;gap:8px}
+
+#contact-inbox-nav .ci-nav-badge,.ci-nav-anchor .ci-nav-badge{position:absolute;top:-5px;inset-inline-start:-7px;z-index:10;pointer-events:none}
+#contact-inbox-nav .ci-nav-badge:not([hidden]),.ci-nav-anchor .ci-nav-badge:not([hidden]){display:inline-block!important}
