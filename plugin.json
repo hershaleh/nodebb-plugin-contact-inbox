@@ -20,6 +20,10 @@
     {
       "hook": "filter:navigation.available",
       "method": "addNavigation"
+    },
+    {
+      "hook": "filter:user.notificationTypes",
+      "method": "addNotificationType"
     }
   ],
   "scripts": [
