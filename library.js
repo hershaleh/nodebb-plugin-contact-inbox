@@ -9,8 +9,10 @@ const DEFAULTS = Object.freeze({
   retentionDays: 0,
   maxPerHour: 5,
   emailReplies: false,
+  notifySubmitter: false,
+  submitterNotificationDelayMinutes: 5,
 });
-let db, user, groups, meta, routeHelpers, apiHelpers, emailer, retentionTimer;
+let db, user, groups, meta, routeHelpers, apiHelpers, emailer, retentionTimer, pendingNotificationTimer, notifications;
 
 const clean = (value, max) => String(value == null ? '' : value).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 const validEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -36,6 +38,8 @@ async function config() {
     allowedGroups: Array.isArray(saved.allowedGroups) && saved.allowedGroups.length ? saved.allowedGroups : ['administrators'],
     retentionDays: Math.max(0, Math.min(3650, Number(saved.retentionDays) || 0)),
     maxPerHour: Math.max(1, Math.min(30, Number(saved.maxPerHour) || 5)),
+    notifySubmitter: saved.notifySubmitter === true,
+    submitterNotificationDelayMinutes: Math.max(1, Math.min(10080, Number(saved.submitterNotificationDelayMinutes) || 5)),
   };
 }
 
@@ -116,6 +120,59 @@ async function notifyStaff(submission) {
   }
 }
 
+async function scheduleSubmitterNotification(submission, cfg) {
+  if (!submission.uid || !cfg.notifySubmitter) return;
+  const delayMinutes = Math.max(1, Math.min(10080, Number(cfg.submitterNotificationDelayMinutes) || 5));
+  const dueAt = Date.now() + delayMinutes * 60000;
+  const job = {
+    id: submission.id,
+    uid: Number(submission.uid),
+    dueAt,
+  };
+  await db.setObject(PREFIX + 'pending-notification:' + submission.id, job);
+  await db.sortedSetAdd(PREFIX + 'pending-notifications', dueAt, submission.id);
+}
+
+async function processPendingNotifications() {
+  const dueIds = await db.getSortedSetRangeByScore(PREFIX + 'pending-notifications', 0, 49, '-inf', Date.now());
+  if (!dueIds.length) return;
+  for (const submissionId of dueIds) {
+    const jobKey = PREFIX + 'pending-notification:' + submissionId;
+    try {
+      const job = await db.getObject(jobKey);
+      if (!job || !Number(job.uid)) {
+        await db.sortedSetRemove(PREFIX + 'pending-notifications', submissionId);
+        await db.delete(jobKey);
+        continue;
+      }
+      const nid = 'contact-inbox:received:' + submissionId;
+      let notification = await notifications.get(nid);
+      if (!notification) {
+        notification = await notifications.create({
+          nid,
+          type: 'contact-inbox-received',
+          bodyShort: 'פנייתך התקבלה. היא תיענה בהקדם.',
+          from: 0,
+          path: '/plugins/contact-inbox',
+        });
+      }
+      if (notification) await notifications.push(notification, [Number(job.uid)]);
+      await db.sortedSetRemove(PREFIX + 'pending-notifications', submissionId);
+      await db.delete(jobKey);
+    } catch (err) {
+      // Keep the persistent job so the next scheduler tick can retry it.
+      console.error('[contact-inbox] submitter notification failed:', submissionId, err.message);
+    }
+  }
+}
+
+async function addNotificationType(data) {
+  data = data || {};
+  data.types = Array.isArray(data.types) ? data.types : [];
+  if (!data.types.includes('contact-inbox-received')) data.types.push('contact-inbox-received');
+  return data;
+}
+
 async function submit(req, res) {
   try {
     const body = req.body || {};
@@ -147,6 +204,7 @@ async function submit(req, res) {
     await db.setObject(key(item.id), item);
     await db.sortedSetAdd(PREFIX + 'submissions', item.createdAt, item.id);
     void notifyStaff(item);
+    void scheduleSubmitterNotification(item, cfg).catch(err => console.error('[contact-inbox] could not schedule submitter notification:', err.message));
     return send(res, 201, { success: true, id: item.id, message: 'הפנייה התקבלה בהצלחה.' });
   } catch (err) {
     console.error('[contact-inbox] submit failed:', err);
@@ -308,11 +366,14 @@ async function saveSettings(req, res) {
   if (!allowedGroups.includes('administrators')) allowedGroups.unshift('administrators');
   const retentionDays = Math.max(0, Math.min(3650, Number(body.retentionDays) || 0));
   const maxPerHour = Math.max(1, Math.min(30, Number(body.maxPerHour) || 5));
+  const submitterNotificationDelayMinutes = Math.max(1, Math.min(10080, Number(body.submitterNotificationDelayMinutes) || 5));
   await meta.settings.set(ID, {
     allowedGroups,
     retentionDays,
     maxPerHour,
     emailReplies: body.emailReplies === true && mailConfigured(),
+    notifySubmitter: body.notifySubmitter === true,
+    submitterNotificationDelayMinutes,
   });
   return send(res, 200, { success: true });
 }
@@ -349,6 +410,7 @@ async function init({ router }) {
   groups = require.main.require('./src/groups');
   meta = require.main.require('./src/meta');
   emailer = require.main.require('./src/emailer');
+  notifications = require.main.require('./src/notifications');
   routeHelpers = require.main.require('./src/routes/helpers');
 
   // filter:navigation.available only exposes choices in ACP; it does not
@@ -378,10 +440,16 @@ async function init({ router }) {
   await navigationAdmin.save(navigationItems);
 
   if (retentionTimer) clearInterval(retentionTimer);
+  if (pendingNotificationTimer) clearInterval(pendingNotificationTimer);
   const runRetention = () => all().catch(err => console.error('[contact-inbox] retention cleanup failed:', err.message));
   void runRetention();
   retentionTimer = setInterval(runRetention, 60 * 60 * 1000);
   if (typeof retentionTimer.unref === 'function') retentionTimer.unref();
+  void processPendingNotifications().catch(err => console.error('[contact-inbox] notification scheduler failed:', err.message));
+  pendingNotificationTimer = setInterval(() => {
+    processPendingNotifications().catch(err => console.error('[contact-inbox] notification scheduler failed:', err.message));
+  }, 15000);
+  if (typeof pendingNotificationTimer.unref === 'function') pendingNotificationTimer.unref();
   routeHelpers.setupAdminPageRoute(router, '/admin/plugins/contact-inbox', [staffOnly], adminPage);
   routeHelpers.setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], forumPage);
   routeHelpers.setupPageRoute(router, '/plugins/contact-inbox/history', [staffOnly], historyPage);
@@ -444,5 +512,6 @@ module.exports = {
   addRoutes,
   addAdminNavigation,
   addNavigation,
+  addNotificationType,
   _test: { clean, validEmail },
 };
