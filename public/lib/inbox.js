@@ -323,7 +323,7 @@
         return;
       }
       items.forEach(item => {
-        const button = el('button', 'ci-row' + (item.id === activeId ? ' active' : ''), '');
+        const button = el('button', 'ci-row' + (item.id === activeId ? ' active' : '') + (view === 'active' && !item.readByMe ? ' ci-row-unread' : ''), '');
         button.type = 'button';
         const top = el('div', 'ci-row-top');
         top.append(el('strong', '', item.subject), el('small', '', date(item.createdAt)));
