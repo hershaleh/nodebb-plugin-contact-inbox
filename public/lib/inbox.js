@@ -46,8 +46,7 @@
     if (navRefreshInProgress) return;
     navRefreshInProgress = true;
     try {
-      // This protected endpoint doubles as an authorization check. Do not
-      // expose the staff inbox link to users who cannot open the inbox.
+      // Verify access before exposing or updating the private inbox shortcut.
       let count;
       try {
         const result = await request('/unread');
@@ -57,37 +56,60 @@
       }
       count = Number.isFinite(count) && count > 0 ? count : 0;
 
-      const route = page;
-      let anchor = document.querySelector('#contact-inbox-nav[href], a#contact-inbox-nav, a[href="' + route + '"], a[href$="/plugins/contact-inbox"]');
-      if (!anchor) {
-        // Some themes do not render plugin navigation items in the header.
-        // Insert beside NodeBB's own chat control instead of depending on
-        // a pre-existing inbox link.
-        const chatToggle = document.querySelector('[component="chat/dropdown"]');
-        const chatItem = chatToggle && (chatToggle.closest('li') || chatToggle.parentElement);
-        const navList = chatItem && chatItem.parentElement;
-        if (!chatToggle || !chatItem || !navList) return;
+      // Prefer the chat control inside NodeBB's left sidebar. Some themes
+      // render additional chat controls elsewhere (header/mobile menus).
+      const chatControls = Array.from(document.querySelectorAll('[component="chat/dropdown"]'));
+      const chatToggle = chatControls.find(node => node.closest('nav.sidebar')) || chatControls[0];
+      if (!chatToggle) return;
 
-        const item = document.createElement(chatItem.tagName.toLowerCase() === 'li' ? 'li' : 'li');
-        item.className = chatItem.className || 'nav-item';
+      const chatItem = chatToggle.closest('li') || chatToggle;
+      let navList = chatItem.parentElement;
+      while (navList && navList !== document.body && !['UL', 'OL'].includes(navList.tagName)) {
+        navList = navList.parentElement;
+      }
+      if (!navList || navList === document.body) return;
+
+      const route = page;
+      const existingLinks = Array.from(document.querySelectorAll(
+        'a#contact-inbox-nav, a[href="' + route + '"], a[href$="/plugins/contact-inbox"]'
+      )).filter(node => node instanceof HTMLAnchorElement);
+      let anchor = existingLinks.find(node => node.closest('ul, ol') === navList) || existingLinks[0] || null;
+
+      // Keep exactly one inbox shortcut and move its navigation item next to
+      // the chat item. This works whether NodeBB or the plugin created it.
+      existingLinks.forEach(node => {
+        if (node === anchor) return;
+        const duplicateItem = node.closest('li');
+        if (duplicateItem && duplicateItem !== chatItem) duplicateItem.remove();
+        else node.remove();
+      });
+
+      let item = anchor && anchor.closest('li');
+      if (!anchor) {
+        item = document.createElement('li');
+        item.className = chatItem.classList.contains('nav-item') ? chatItem.className : 'nav-item';
         anchor = document.createElement('a');
+        anchor.className = 'nav-link navigation-link d-flex gap-2 align-items-center';
         anchor.id = 'contact-inbox-nav';
-        anchor.className = 'nav-link';
         anchor.href = route;
         const icon = document.createElement('i');
-        icon.className = 'fa fa-envelope';
         icon.setAttribute('aria-hidden', 'true');
         anchor.appendChild(icon);
         const label = document.createElement('span');
-        label.className = 'd-lg-none';
+        label.className = 'nav-text small visible-open fw-semibold';
         label.textContent = 'תיבת פניות';
         anchor.appendChild(label);
         item.appendChild(anchor);
-        navList.insertBefore(item, chatItem);
-      } else if (anchor.tagName !== 'A') {
-        anchor = anchor.querySelector('a');
+      } else if (!item) {
+        item = document.createElement('li');
+        item.className = 'nav-item';
+        anchor.parentNode.insertBefore(item, anchor);
+        item.appendChild(anchor);
       }
-      if (!anchor) return;
+
+      if (item.parentElement !== navList || item.previousElementSibling !== chatItem) {
+        navList.insertBefore(item, chatItem.nextElementSibling);
+      }
 
       anchor.id = 'contact-inbox-nav';
       anchor.href = route;
@@ -95,16 +117,16 @@
       anchor.setAttribute('aria-label', 'תיבת פניות');
       anchor.classList.add('ci-nav-anchor');
 
-      let icon = anchor.querySelector('i.fa-envelope, i.fa-envelope-o, .fa-envelope, .fa-envelope-o');
+      // Font Awesome 7's regular envelope is the outline-only variant.
+      let icon = anchor.querySelector('i');
       if (!icon) {
         icon = document.createElement('i');
-        icon.className = 'fa fa-envelope';
-        icon.setAttribute('aria-hidden', 'true');
         anchor.insertBefore(icon, anchor.firstChild);
-      } else {
-        icon.classList.remove('fa-envelope-o');
-        icon.classList.add('fa', 'fa-envelope');
       }
+      icon.classList.remove('fa', 'fa-solid', 'fa-envelope-o', 'fa-envelope');
+      icon.classList.add('fa-regular', 'fa-envelope');
+      icon.setAttribute('aria-hidden', 'true');
+      icon.style.fontWeight = '400';
 
       let badge = anchor.querySelector('.ci-nav-badge');
       if (!badge) {
