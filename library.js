@@ -413,6 +413,24 @@ async function addRoutes({ router, middleware, helpers }) {
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/settings', [staffOnly, middleware.applyCSRF], saveSettings);
 }
 
+async function addNavigation(items) {
+  if (!Array.isArray(items)) return items;
+  const route = '/plugins/contact-inbox';
+  if (!items.some(item => item && item.route === route)) {
+    items.push({
+      id: 'contact-inbox',
+      route,
+      title: 'תיבת פניות',
+      enabled: true,
+      iconClass: 'fa-envelope-o',
+      textClass: 'd-lg-none',
+      text: 'תיבת פניות',
+      groups: ['administrators'],
+    });
+  }
+  return items;
+}
+
 async function addAdminNavigation(header) {
   if (header && Array.isArray(header.plugins)) {
     header.plugins.push({ route: '/plugins/contact-inbox', icon: 'fa-envelope', name: 'תיבת פניות' });
@@ -424,5 +442,6 @@ module.exports = {
   init,
   addRoutes,
   addAdminNavigation,
+  addNavigation,
   _test: { clean, validEmail },
 };
