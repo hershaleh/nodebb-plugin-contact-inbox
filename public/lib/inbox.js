@@ -451,6 +451,8 @@
       const inboxPage = document.getElementById('ci-inbox-page'), settingsPage = document.getElementById('ci-settings-page');
       if (!settingsPage) return; if (inboxPage) inboxPage.hidden = true; settingsPage.hidden = false;
       root.querySelector('h1').textContent = 'הגדרות תיבת הפניות';
+      const headerSubtitle = root.querySelector('.contact-inbox-header p');
+      if (headerSubtitle) headerSubtitle.hidden = true;
       historyButton.hidden = true; settingsButton.hidden = true; document.getElementById('ci-back-button').hidden = false;
       const content = document.getElementById('ci-settings-content'); content.replaceChildren(el('p', '', 'טוען הגדרות…'));
       await loadSettings();
@@ -474,7 +476,7 @@
       const delayLabel = el('label', '', 'השהיה לפני שליחת ההתראה (בדקות)'), delayInput = el('input', 'form-control');
       delayInput.type = 'number'; delayInput.min = '1'; delayInput.max = '10080'; delayInput.step = '1'; delayInput.value = (settings && settings.submitterNotificationDelayMinutes) || 5;
       submitter.append(submitterLabel, delayLabel, delayInput, el('p', 'text-muted', 'ההתראה תופיע בדף ההתראות הרגיל של המשתמש, לאחר ההשהיה שנקבעה. אורחים לא יקבלו התראה זו.'));
-      alerts.append(submitter);
+      if (isAdmin) alerts.append(submitter);
       const prefs = el('div', 'ci-settings-subsection ci-personal-prefs'); prefs.append(el('h4', '', 'התראות לצוות'));
       const p = await request('/preferences');
       const forumInput = el('input', 'form-check-input'); forumInput.type = 'checkbox'; forumInput.checked = !!p.preferences.notifyInForum;
