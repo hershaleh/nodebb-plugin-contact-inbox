@@ -76,38 +76,27 @@
 
   async function notify(message, type) {
     try {
-      // NodeBB 3+ exposes client modules through app.require().
-      // The alerts module renders the native floating toaster notifications.
-      let alerts;
-      if (window.app && typeof window.app.require === 'function') {
-        alerts = await window.app.require('alerts');
-      } else if (typeof window.require === 'function') {
-        alerts = await new Promise((resolve, reject) => {
-          window.require(['alerts'], resolve, reject);
-        });
+      const show = alerts => {
+        if (!alerts) return false;
+        if (type === 'success' && typeof alerts.success === 'function') { alerts.success(message, 5000); return true; }
+        if ((type === 'danger' || type === 'error') && typeof alerts.error === 'function') { alerts.error(message, 10000); return true; }
+        if (type === 'warning' && typeof alerts.warning === 'function') { alerts.warning(message, 5000); return true; }
+        if (typeof alerts.info === 'function') { alerts.info(message, 5000); return true; }
+        return false;
+      };
+      // NodeBB 4.15 ships the AMD "alerts" module. Use its actual toaster API.
+      if (typeof window.require === 'function') {
+        const alerts = await new Promise((resolve, reject) => window.require(['alerts'], resolve, reject));
+        if (show(alerts)) return;
       }
-      if (alerts) {
-        if (type === 'success' && typeof alerts.success === 'function') return alerts.success(message, 5000);
-        if ((type === 'danger' || type === 'error') && typeof alerts.error === 'function') return alerts.error(message, 10000);
-        if (type === 'warning' && typeof alerts.warning === 'function') return alerts.warning(message, 5000);
-        if (typeof alerts.info === 'function') return alerts.info(message, 5000);
+      if (window.app && typeof window.app.alert === 'function') {
+        window.app.alert({ title: type === 'success' ? 'הצלחה' : 'הודעה', message, type: type === 'danger' ? 'danger' : type || 'info', timeout: 5000 });
+        return;
       }
     } catch (err) {
-      console.error('[contact-inbox] native NodeBB alert failed:', err);
+      console.error('[contact-inbox] NodeBB toaster notification failed:', err);
     }
-    let host = document.getElementById('ci-toast-host');
-    if (!host) {
-      host = document.createElement('div');
-      host.id = 'ci-toast-host';
-      host.className = 'ci-toast-host';
-      document.body.appendChild(host);
-    }
-    const note = document.createElement('div');
-    note.className = 'alert alert-' + (type || 'info') + ' ci-toast';
-    note.setAttribute('role', 'status');
-    note.textContent = message;
-    host.appendChild(note);
-    window.setTimeout(() => note.remove(), 5000);
+    console.error('[contact-inbox] Native NodeBB alerts module is unavailable:', message);
   }
 
   function modal(title, bodyNode, buttons) {
@@ -266,6 +255,22 @@
           ]);
         });
         actions.append(email);
+        if (view === 'history') {
+          const reopen = el('button', 'btn btn-warning', 'סמן כלא טופל');
+          reopen.type = 'button';
+          reopen.addEventListener('click', async () => {
+            reopen.disabled = true;
+            try {
+              await request('/submissions/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify({ status: 'new' }) });
+              activeId = null;
+              detail.replaceChildren(el('p', 'ci-empty', 'הפנייה הוחזרה לפניות הפעילות.'));
+              await load();
+              await notify('הפנייה סומנה כלא טופלה והוחזרה לפניות הפעילות.', 'success');
+              window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
+            } catch (err) { await notify(err.message, 'danger'); reopen.disabled = false; }
+          });
+          actions.append(reopen);
+        }
         if (view === 'active') {
           const done = el('button', 'btn btn-success', 'סמן כטופל');
           done.type = 'button';
@@ -345,36 +350,57 @@
       await loadSettings();
       const form = el('div', 'ci-settings-form');
       if (isAdmin) {
-        const groupsLabel = el('label', '', 'קבוצות מורשות (שמות מופרדים בפסיקים)');
-        const groupsInput = el('input', 'form-control'); groupsInput.value = (settings.allowedGroups || ['administrators']).join(', ');
+        const groupsLabel = el('label', '', 'קבוצות מורשות');
+        const groupsWrap = el('div', 'ci-groups-list');
+        const groupData = await request('/groups');
+        const selected = new Set(settings.allowedGroups || ['administrators']);
+        (groupData.groups || []).forEach(name => {
+          const label = el('label', 'checkbox ci-group-option', name);
+          const input = el('input');
+          input.type = 'checkbox';
+          input.value = name;
+          input.checked = selected.has(name);
+          label.prepend(input);
+          groupsWrap.append(label);
+        });
         const rateLabel = el('label', '', 'מספר פניות מרבי מכתובת IP בשעה');
         const rateInput = el('input', 'form-control'); rateInput.type = 'number'; rateInput.min = '1'; rateInput.max = '30'; rateInput.value = settings.maxPerHour || 5;
-        const notifyLabel = el('label', 'checkbox', 'התראות דוא״ל לצוות'); const notifyInput = el('input'); notifyInput.type = 'checkbox'; notifyInput.checked = !!settings.emailNotifications; notifyLabel.prepend(notifyInput);
         const repliesLabel = el('label', 'checkbox', 'אפשר שליחת תשובות בדוא״ל'); const repliesInput = el('input'); repliesInput.type = 'checkbox'; repliesInput.checked = !!settings.emailReplies; repliesLabel.prepend(repliesInput);
-        form.append(el('h3', '', 'הגדרות מנהל'), groupsLabel, groupsInput, rateLabel, rateInput, notifyLabel, repliesLabel,
+        form.append(el('h3', '', 'הגדרות מנהל'), groupsLabel, groupsWrap, rateLabel, rateInput, repliesLabel,
           el('p', 'text-muted', settings.smtpConfigured ? 'SMTP וכתובת השולח מוגדרים.' : 'SMTP או כתובת השולח אינם מוגדרים; שליחת תשובות לא תהיה זמינה.'));
         form.dataset.adminSettings = '1';
-        form._adminFields = { groupsInput, rateInput, notifyInput, repliesInput };
+        form._adminFields = { groupsWrap, rateInput, repliesInput };
       }
       const prefs = el('section', 'ci-personal-prefs');
       prefs.append(el('h3', '', 'העדפות התראות אישיות'));
-      const personalEmail = el('input', 'form-control'); personalEmail.type = 'email'; personalEmail.placeholder = 'כתובת לקבלת התראות';
       const personalNotify = el('input'); personalNotify.type = 'checkbox';
-      const personalLabel = el('label', '', 'שליחת התראה אליי כשמתקבלת פנייה חדשה'); personalLabel.prepend(personalNotify);
-      prefs.append(personalEmail, personalLabel); form.append(prefs);
+      const personalLabel = el('label', '', 'קבלת התראות דוא״ל לכתובת שבחשבון שלי');
+      personalLabel.prepend(personalNotify);
+      const extraEmails = el('div', 'ci-extra-emails');
+      const addEmail = el('button', 'btn btn-default', '+ הוספת כתובת דוא״ל נוספת'); addEmail.type = 'button';
+      function addEmailField(value) {
+        const row = el('div', 'ci-extra-email-row');
+        const input = el('input', 'form-control'); input.type = 'email'; input.placeholder = 'כתובת דוא״ל נוספת'; input.value = value || '';
+        const remove = el('button', 'btn btn-default', 'הסרה'); remove.type = 'button';
+        remove.addEventListener('click', () => row.remove());
+        row.append(input, remove); extraEmails.append(row);
+      }
+      addEmail.addEventListener('click', () => addEmailField(''));
+      prefs.append(personalLabel, extraEmails, addEmail); form.append(prefs);
       const p = await request('/preferences');
-      personalEmail.value = p.preferences.email || ''; personalNotify.checked = !!p.preferences.notify;
+      personalNotify.checked = !!p.preferences.notify;
+      (p.preferences.extraEmails || []).forEach(addEmailField);
       const save = el('button', 'btn btn-primary', 'שמירת הגדרות'); save.type = 'button';
       save.addEventListener('click', async () => {
         save.disabled = true;
         try {
-          await request('/preferences', { method: 'PUT', body: JSON.stringify({ email: personalEmail.value, notify: personalNotify.checked }) });
+          await request('/preferences', { method: 'PUT', body: JSON.stringify({ notify: personalNotify.checked, extraEmails: Array.from(extraEmails.querySelectorAll('input')).map(input => input.value.trim()).filter(Boolean) }) });
           if (isAdmin && form._adminFields) {
             const f = form._adminFields;
             await request('/settings', { method: 'PUT', body: JSON.stringify({
-              allowedGroups: f.groupsInput.value.split(',').map(v => v.trim()).filter(Boolean),
+              allowedGroups: Array.from(f.groupsWrap.querySelectorAll('input:checked')).map(input => input.value),
               maxPerHour: Number(f.rateInput.value), retentionDays: Number(settings.retentionDays) || 0,
-              emailNotifications: f.notifyInput.checked, emailReplies: f.repliesInput.checked
+              emailReplies: f.repliesInput.checked
             }) });
           }
           await notify('ההגדרות נשמרו.', 'success');
@@ -403,7 +429,7 @@
           allowedGroups: settings.allowedGroups || ['administrators'],
           maxPerHour: settings.maxPerHour || 5,
           retentionDays: Number(document.getElementById('ci-retention').value),
-          emailNotifications: !!settings.emailNotifications, emailReplies: !!settings.emailReplies
+          emailReplies: !!settings.emailReplies
         }) });
         msg.textContent = 'מדיניות השמירה נשמרה.'; await notify('מדיניות שמירת ההיסטוריה נשמרה.', 'success');
       } catch (err) { msg.textContent = err.message; }
