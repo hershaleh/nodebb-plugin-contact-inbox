@@ -30,7 +30,7 @@
 .ci-email-reply-option input{margin-top:5px;flex:0 0 auto}
 .ci-nav-badge{position:absolute;top:-5px;inset-inline-start:-7px;display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:16px;padding:0 4px;border-radius:4px;background:#0d6efd;color:#fff;font-size:11px;font-weight:700;line-height:16px;text-align:center;box-shadow:0 0 0 1px var(--bs-body-bg,#fff)}
 .ci-nav-badge[hidden]{display:none}
-#contact-inbox-nav>a{position:relative}
+#contact-inbox-nav>a,.ci-nav-anchor{position:relative}
 @media(max-width:760px){.contact-inbox-page{width:calc(100% - 16px);margin:12px auto;padding:12px}.contact-inbox-layout{grid-template-columns:minmax(0,1fr);gap:12px}.contact-inbox-list,.contact-inbox-detail{min-height:0;padding:12px}.contact-inbox-list{max-height:360px}.contact-inbox-toolbar>*{flex:1 1 100%;max-width:100%}.ci-controls>*{flex:1 1 100%;max-width:100%}.contact-inbox-header{align-items:flex-start}}
 
 .ci-header-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
