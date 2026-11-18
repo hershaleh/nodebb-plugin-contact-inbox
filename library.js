@@ -69,7 +69,8 @@ async function staffOnly(req, res, next) {
 // Public submissions must work for guests, whose CSRF token may not be
 // available on custom pages. Authenticated users retain NodeBB CSRF checks;
 // guest requests are restricted to the configured forum origin.
-function publicSubmitProtection(req, res, next) {
+function publicSubmitProtection(middleware) {
+  return function (req, res, next) {
   if (Number(req.uid) > 0) return middleware.applyCSRF(req, res, next);
   let expectedOrigin = '';
   let requestOrigin = String(req.headers.origin || '').trim();
@@ -83,6 +84,7 @@ function publicSubmitProtection(req, res, next) {
     return send(res, 403, { error: 'שליחת פנייה מותרת רק מתוך אתר הפורום.' });
   }
   return next();
+  };
 }
 
 async function get(idValue) {
@@ -565,7 +567,7 @@ async function init({ router }) {
 async function addRoutes({ router, middleware, helpers }) {
   apiHelpers = helpers;
   routeHelpers = routeHelpers || require.main.require('./src/routes/helpers');
-  const publicMw = [publicSubmitProtection];
+  const publicMw = [publicSubmitProtection(middleware)];
   const staffMw = [staffOnly];
   const staffWriteMw = [staffOnly, middleware.applyCSRF];
   const adminMw = [staffOnly];
