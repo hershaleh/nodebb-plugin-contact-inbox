@@ -160,3 +160,27 @@ test('successful status and retention actions display native success notificatio
   assert.ok(client.includes('הפנייה סומנה כטופלה והועברה להיסטוריה.'));
   assert.ok(client.includes('מדיניות שמירת ההיסטוריה נשמרה.'));
 });
+
+
+test('NodeBB native alerts are loaded through app.require and shown with alerts API', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(client.includes("window.app.require('alerts')"));
+  assert.ok(client.includes('alerts.success(message, 5000)'));
+  assert.ok(client.includes('alerts.error(message, 10000)'));
+});
+
+test('plugin ensures its navigation item is enabled in the live NodeBB menu', () => {
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  assert.ok(server.includes("require.main.require('./src/navigation/admin')"));
+  assert.ok(server.includes("navigationAdmin.save(navigationItems)"));
+  assert.ok(server.includes("id: 'contact-inbox-nav'"));
+});
+
+test('manual deletion verifies that both the database record and sorted-set index are removed', () => {
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(server.includes('db.exists(key(item.id))'));
+  assert.ok(server.includes('db.isSortedSetMember(PREFIX + \'submissions\', item.id)'));
+  assert.ok(server.includes('deleted: true, id: item.id'));
+  assert.ok(client.includes('result.deleted !== true'));
+});
