@@ -62,6 +62,7 @@
       anchor.href = route;
       anchor.title = 'תיבת פניות';
       anchor.setAttribute('aria-label', 'תיבת פניות');
+      anchor.classList.add('ci-nav-anchor');
       let icon = anchor.querySelector('i.fa-envelope, i.fa-envelope-o, .fa-envelope, .fa-envelope-o');
       if (!icon) {
         icon = document.createElement('i');
