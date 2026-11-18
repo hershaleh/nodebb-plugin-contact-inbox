@@ -12,7 +12,7 @@
     <div class="contact-inbox-toolbar">
       <input id="ci-search" class="form-control" type="search" placeholder="חיפוש לפי שם, דוא״ל, נושא או תוכן" aria-label="חיפוש פניות">
       <select id="ci-status" class="form-control" aria-label="סינון לפי סטטוס">
-        <option value="all">כל הסטטוסים</option><option value="new">חדשות</option><option value="in_progress">בטיפול</option>
+        <option value="all">כל הסטטוסים</option><option value="unread">לא נקראו</option>
       </select>
       <button id="ci-refresh" class="btn btn-primary" type="button">רענון</button>
     </div>
@@ -27,8 +27,6 @@
     </div>
   </main>
   <main id="ci-settings-page" hidden>
-    <h2>הגדרות תיבת הפניות</h2>
-    <p class="text-muted">הגדרות אישיות והגדרות ניהול. כולל הגדרות מחיקת היסטוריית הפניות.</p>
     <div id="ci-settings-content" class="ci-settings-content"><p>טוען הגדרות…</p></div>
   </main>
 </div>

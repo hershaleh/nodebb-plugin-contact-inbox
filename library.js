@@ -8,16 +8,20 @@ const DEFAULTS = Object.freeze({
   allowedGroups: ['administrators'],
   retentionDays: 0,
   maxPerHour: 5,
-  emailReplies: false,
+  notifySubmitter: false,
+  submitterNotificationDelayMinutes: 5,
+  notifyStaffInApp: false,
 });
-let db, user, groups, meta, routeHelpers, apiHelpers, emailer, retentionTimer;
+let db, user, groups, meta, routeHelpers, apiHelpers, emailer, retentionTimer, pendingNotificationTimer, notifications, processingNotifications = false;
 
 const clean = (value, max) => String(value == null ? '' : value).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 const validEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const id = () => crypto.randomBytes(16).toString('hex');
 const key = submissionId => PREFIX + 'submission:' + submissionId;
 function mailConfigured() {
-  return Number(meta.config['email:smtpTransport:enabled']) === 1 && validEmail(meta.config['email:from'] || '');
+  // NodeBB's emailer supplies a default From address when email:from is empty.
+  // Reuse the same enabled transport used for registration and password-reset emails.
+  return Number(meta.config['email:smtpTransport:enabled']) === 1 && !!emailer && typeof emailer.sendToEmail === 'function';
 }
 
 const send = (res, status, data) => {
@@ -36,6 +40,9 @@ async function config() {
     allowedGroups: Array.isArray(saved.allowedGroups) && saved.allowedGroups.length ? saved.allowedGroups : ['administrators'],
     retentionDays: Math.max(0, Math.min(3650, Number(saved.retentionDays) || 0)),
     maxPerHour: Math.max(1, Math.min(30, Number(saved.maxPerHour) || 5)),
+    notifySubmitter: saved.notifySubmitter === true,
+    submitterNotificationDelayMinutes: Math.max(1, Math.min(10080, Number(saved.submitterNotificationDelayMinutes) || 5)),
+    notifyStaffInApp: saved.notifyStaffInApp === true,
   };
 }
 
@@ -56,6 +63,41 @@ async function staffOnly(req, res, next) {
     if (!(await hasAccess(req.uid))) return send(res, 403, { error: 'אין הרשאה לתיבת הפניות' });
     return next();
   } catch (err) { return next(err); }
+}
+
+// Public submissions must work for guests, whose CSRF token may not be
+// available on custom pages. Authenticated users retain NodeBB CSRF checks;
+// guest requests are restricted to the configured forum origin.
+function publicSubmitProtection(middleware) {
+  return function (req, res, next) {
+    // Logged-in users must pass NodeBB's normal CSRF validation.
+    if (Number(req.uid) > 0) return middleware.applyCSRF(req, res, next);
+
+    const parseOrigin = value => {
+      try {
+        return new URL(String(value || '')).origin;
+      } catch (err) {
+        return '';
+      }
+    };
+
+    // Prefer NodeBB's canonical URL. Some NodeBB runtime configurations do
+    // not expose config.url through meta.config, so fall back to the actual
+    // request host/protocol rather than rejecting every guest submission.
+    const configuredOrigin = parseOrigin(meta && meta.config && meta.config.url);
+    const requestHost = typeof req.get === 'function' ? req.get('host') : req.headers.host;
+    const requestProtocol = req.protocol || (req.secure ? 'https' : 'http');
+    const expectedOrigin = configuredOrigin || parseOrigin(requestProtocol + '://' + requestHost);
+
+    const requestOrigin = parseOrigin(req.headers.origin) || parseOrigin(req.headers.referer);
+    if (!expectedOrigin) {
+      return send(res, 403, { error: 'לא ניתן לאמת את כתובת הפורום בבקשה זו.' });
+    }
+    if (!requestOrigin || requestOrigin !== expectedOrigin) {
+      return send(res, 403, { error: 'שליחת פנייה מותרת רק מתוך אתר הפורום.' });
+    }
+    return next();
+  };
 }
 
 async function get(idValue) {
@@ -82,8 +124,12 @@ async function all() {
   return kept;
 }
 
-async function countUnread() {
-  return (await all()).filter(item => item.status !== 'resolved').length;
+async function countUnread(uid) {
+  const items = (await all()).filter(item => item.status !== 'resolved');
+  if (!Number(uid) || Number(uid) < 1 || !items.length) return items.length;
+  const ids = items.map(item => item.id);
+  const readByUser = await db.isSortedSetMembers(PREFIX + 'staff:' + Number(uid) + ':read', ids);
+  return readByUser.filter(isRead => !isRead).length;
 }
 
 async function notifyStaff(submission) {
@@ -114,6 +160,111 @@ async function notifyStaff(submission) {
   } catch (err) {
     console.error('[contact-inbox] staff notification failed:', err.message);
   }
+}
+
+async function notifyStaffInApp(submission, cfg) {
+  try {
+    const staffUids = new Set();
+    for (const groupName of cfg.allowedGroups) {
+      if (!groups || typeof groups.getMembers !== 'function') continue;
+      const members = await groups.getMembers(groupName, 0, -1);
+      members.forEach(uid => {
+        const numericUid = Number(uid);
+        if (Number.isInteger(numericUid) && numericUid > 0) staffUids.add(numericUid);
+      });
+    }
+    const optedInUids = [];
+    for (const uid of staffUids) {
+      const prefs = await db.getObject(PREFIX + 'staff:' + uid) || {};
+      // Preserve the previous administrator-wide setting for existing staff
+      // until each person explicitly saves their own preference.
+      const enabled = typeof prefs.notifyInForum === 'boolean'
+        ? prefs.notifyInForum
+        : cfg.notifyStaffInApp;
+      if (enabled) optedInUids.push(uid);
+    }
+    if (!optedInUids.length) return;
+    const nid = 'contact-inbox:new:' + submission.id;
+    let notification = await notifications.get(nid);
+    if (!notification) {
+      notification = await notifications.create({
+        nid,
+        type: 'contact-inbox-new',
+        bodyShort: 'התקבלה פנייה חדשה בתיבת הפניות.',
+        from: 0,
+        path: '/plugins/contact-inbox',
+      });
+    }
+    if (notification) await notifications.push(notification, optedInUids);
+  } catch (err) {
+    console.error('[contact-inbox] staff in-app notification failed:', err.message);
+  }
+}
+
+async function scheduleSubmitterNotification(submission, cfg) {
+  if (!submission.uid || !cfg.notifySubmitter) return;
+  const delayMinutes = Math.max(1, Math.min(10080, Number(cfg.submitterNotificationDelayMinutes) || 5));
+  const dueAt = Date.now() + delayMinutes * 60000;
+  const job = {
+    id: submission.id,
+    uid: Number(submission.uid),
+    dueAt,
+  };
+  await db.setObject(PREFIX + 'pending-notification:' + submission.id, job);
+  await db.sortedSetAdd(PREFIX + 'pending-notifications', dueAt, submission.id);
+}
+
+async function processPendingNotifications() {
+  if (processingNotifications) return;
+  processingNotifications = true;
+  try {
+    const dueIds = await db.getSortedSetRangeByScore(PREFIX + 'pending-notifications', 0, 49, '-inf', Date.now());
+    for (const submissionId of dueIds) {
+      const jobKey = PREFIX + 'pending-notification:' + submissionId;
+      try {
+        const job = await db.getObject(jobKey);
+        if (!job || !Number(job.uid)) {
+          await db.sortedSetRemove(PREFIX + 'pending-notifications', submissionId);
+          await db.delete(jobKey);
+          continue;
+        }
+        const nid = 'contact-inbox:received:' + submissionId;
+        let notification = await notifications.get(nid);
+        if (!notification) {
+          notification = await notifications.create({
+            nid,
+            type: 'contact-inbox-received',
+            bodyShort: 'פנייתך התקבלה. היא תיענה בהקדם.',
+            from: 0,
+            path: '/plugins/contact-inbox',
+          });
+        }
+        if (notification) {
+          const uid = Number(job.uid);
+          const [alreadyUnread, alreadyRead] = await Promise.all([
+            db.isSortedSetMember('uid:' + uid + ':notifications:unread', nid),
+            db.isSortedSetMember('uid:' + uid + ':notifications:read', nid),
+          ]);
+          if (!alreadyUnread && !alreadyRead) await notifications.push(notification, [uid]);
+        }
+        await db.sortedSetRemove(PREFIX + 'pending-notifications', submissionId);
+        await db.delete(jobKey);
+      } catch (err) {
+        // Keep the persistent job so the next scheduler tick can retry it.
+        console.error('[contact-inbox] submitter notification failed:', submissionId, err.message);
+      }
+    }
+  } finally {
+    processingNotifications = false;
+  }
+}
+
+async function addNotificationType(data) {
+  data = data || {};
+  data.types = Array.isArray(data.types) ? data.types : [];
+  if (!data.types.includes('contact-inbox-received')) data.types.push('contact-inbox-received');
+  if (!data.types.includes('contact-inbox-new')) data.types.push('contact-inbox-new');
+  return data;
 }
 
 async function submit(req, res) {
@@ -147,6 +298,12 @@ async function submit(req, res) {
     await db.setObject(key(item.id), item);
     await db.sortedSetAdd(PREFIX + 'submissions', item.createdAt, item.id);
     void notifyStaff(item);
+    void notifyStaffInApp(item, cfg);
+    try {
+      await scheduleSubmitterNotification(item, cfg);
+    } catch (err) {
+      console.error('[contact-inbox] could not schedule submitter notification:', err.message);
+    }
     return send(res, 201, { success: true, id: item.id, message: 'הפנייה התקבלה בהצלחה.' });
   } catch (err) {
     console.error('[contact-inbox] submit failed:', err);
@@ -159,19 +316,29 @@ async function list(req, res) {
   const q = clean(req.query.q, 120).toLocaleLowerCase();
   const view = clean(req.query.view, 20) || 'active';
   const status = clean(req.query.status, 30);
-  const submissions = items.filter(item => {
+  const activeItems = items.filter(item => view === 'history' ? item.status === 'resolved' : item.status !== 'resolved');
+  const readIds = Number(req.uid) > 0 && activeItems.length ? await db.isSortedSetMembers(PREFIX + 'staff:' + Number(req.uid) + ':read', activeItems.map(item => item.id)) : activeItems.map(() => false);
+  const readState = new Map(activeItems.map((item, index) => [item.id, !!readIds[index]]));
+  const submissions = activeItems.filter(item => {
     const text = [item.name, item.email, item.username, item.subject, item.message].join(' ').toLocaleLowerCase();
-    const inView = view === 'history' ? item.status === 'resolved' : item.status !== 'resolved';
-    return inView && (!q || text.includes(q)) && (!status || status === 'all' || item.status === status);
+    return (status !== 'unread' || !readState.get(item.id)) && (!q || text.includes(q));
   });
-  return send(res, 200, { submissions, newCount: items.filter(item => item.status !== 'resolved').length, historyCount: items.filter(item => item.status === 'resolved').length });
+  const submissionsWithReadState = submissions.map(item => ({ ...item, readByMe: !!readState.get(item.id) }));
+  return send(res, 200, {
+    submissions: submissionsWithReadState,
+    newCount: await countUnread(req.uid),
+    historyCount: items.filter(item => item.status === 'resolved').length,
+  });
 }
 
 async function detail(req, res) {
   const item = await get(req.params.id);
   if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
-  // Opening a submission does not change its workflow category.
-  return send(res, 200, { submission: item });
+  // Read state is private to the current staff member and does not change workflow status.
+  const readByMe = Number(req.uid) > 0
+    ? await db.isSortedSetMember(PREFIX + 'staff:' + Number(req.uid) + ':read', item.id)
+    : false;
+  return send(res, 200, { submission: { ...item, readByMe: !!readByMe } });
 }
 
 async function update(req, res) {
@@ -182,6 +349,7 @@ async function update(req, res) {
   item.status = status;
   item.updatedAt = Date.now();
   await db.setObject(key(item.id), item);
+  if (status !== 'resolved' && Number(req.uid) > 0) await db.sortedSetRemove(PREFIX + 'staff:' + Number(req.uid) + ':read', item.id);
   return send(res, 200, { success: true, submission: item });
 }
 
@@ -225,11 +393,10 @@ async function reply(req, res) {
   if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
   const message = clean(req.body?.message, 10000);
   if (!message) return send(res, 400, { error: 'יש להזין תוכן לתשובה' });
-  const cfg = await config();
   const sendEmail = req.body?.sendEmail === true;
   if (sendEmail) {
-    if (!cfg.emailReplies || !mailConfigured()) {
-      return send(res, 409, { error: 'יש להפעיל תחילה שליחת תשובות ולהגדיר SMTP בהגדרות הדוא״ל של NodeBB.' });
+    if (!mailConfigured()) {
+      return send(res, 409, { error: 'שליחת דוא״ל אינה זמינה כרגע. יש להגדיר ולהפעיל SMTP בהגדרות הדוא״ל של NodeBB.' });
     }
     try {
       await emailer.sendToEmail('contact-inbox-reply', item.email, null, {
@@ -274,23 +441,61 @@ async function openChat(req, res) {
   }
 }
 
+async function markSubmissionRead(req, res) {
+  const item = await get(req.params.id);
+  if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
+  const uid = Number(req.uid);
+  if (!Number.isInteger(uid) || uid < 1) return send(res, 403, { error: 'אין הרשאה לסמן פנייה כנקראה' });
+
+  await db.sortedSetAdd(PREFIX + 'staff:' + uid + ':read', Date.now(), item.id);
+  try {
+    const nid = 'contact-inbox:new:' + item.id;
+    await notifications.markRead(nid, uid);
+    if (user.notifications && typeof user.notifications.pushCount === 'function') {
+      user.notifications.pushCount(uid);
+    }
+  } catch (err) {
+    console.error('[contact-inbox] could not mark matching NodeBB notification as read:', err.message);
+  }
+  return send(res, 200, { success: true, readByMe: true });
+}
+
+async function markSubmissionUnread(req, res) {
+  const item = await get(req.params.id);
+  if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
+  const uid = Number(req.uid);
+  if (!Number.isInteger(uid) || uid < 1) return send(res, 403, { error: 'אין הרשאה לסמן פנייה כלא נקראה' });
+  await db.sortedSetRemove(PREFIX + 'staff:' + uid + ':read', item.id);
+  return send(res, 200, { success: true, readByMe: false });
+}
+
 async function unread(req, res) {
-  return send(res, 200, { count: await countUnread() });
+  return send(res, 200, { count: await countUnread(req.uid) });
 }
 
 async function saveStaffPrefs(req, res) {
   const notify = req.body?.notify === true;
+  const notifyInForum = req.body?.notifyInForum === true;
   const extraEmails = Array.isArray(req.body?.extraEmails)
     ? [...new Set(req.body.extraEmails.map(value => clean(value, 254).toLowerCase()).filter(Boolean))].slice(0, 20)
     : [];
   if (extraEmails.some(email => !validEmail(email))) return send(res, 400, { error: 'אחת מכתובות הדוא״ל הנוספות אינה תקינה' });
-  await db.setObject(PREFIX + 'staff:' + req.uid, { notify, extraEmails });
+  const current = await db.getObject(PREFIX + 'staff:' + req.uid) || {};
+  await db.setObject(PREFIX + 'staff:' + req.uid, { ...current, notify, notifyInForum, extraEmails });
   return send(res, 200, { success: true });
 }
 
 async function getStaffPrefs(req, res) {
-  const prefs = await db.getObject(PREFIX + 'staff:' + req.uid) || { notify: false, extraEmails: [] };
-  return send(res, 200, { preferences: { notify: !!prefs.notify, extraEmails: Array.isArray(prefs.extraEmails) ? prefs.extraEmails : [] } });
+  const prefs = await db.getObject(PREFIX + 'staff:' + req.uid) || {};
+  const cfg = await config();
+  const notifyInForum = typeof prefs.notifyInForum === 'boolean'
+    ? prefs.notifyInForum
+    : cfg.notifyStaffInApp;
+  return send(res, 200, { preferences: {
+    notify: !!prefs.notify,
+    notifyInForum,
+    extraEmails: Array.isArray(prefs.extraEmails) ? prefs.extraEmails : [],
+  } });
 }
 
 async function getGroups(req, res) {
@@ -308,11 +513,17 @@ async function saveSettings(req, res) {
   if (!allowedGroups.includes('administrators')) allowedGroups.unshift('administrators');
   const retentionDays = Math.max(0, Math.min(3650, Number(body.retentionDays) || 0));
   const maxPerHour = Math.max(1, Math.min(30, Number(body.maxPerHour) || 5));
+  const submitterNotificationDelayMinutes = Math.max(1, Math.min(10080, Number(body.submitterNotificationDelayMinutes) || 5));
+  const currentConfig = await config();
   await meta.settings.set(ID, {
     allowedGroups,
     retentionDays,
     maxPerHour,
-    emailReplies: body.emailReplies === true && mailConfigured(),
+    notifySubmitter: body.notifySubmitter === true,
+    submitterNotificationDelayMinutes,
+    // Keep the former global value only as a migration default for staff
+    // members who have not yet saved their personal forum-notification choice.
+    notifyStaffInApp: currentConfig.notifyStaffInApp,
   });
   return send(res, 200, { success: true });
 }
@@ -323,8 +534,7 @@ async function getSettings(req, res) {
 }
 
 async function getCapabilities(req, res) {
-  const cfg = await config();
-  return send(res, 200, { emailReplies: !!cfg.emailReplies, smtpConfigured: mailConfigured(), isAdmin: await user.isAdministrator(req.uid) });
+  return send(res, 200, { smtpConfigured: mailConfigured(), isAdmin: await user.isAdministrator(req.uid) });
 }
 
 async function adminPage(req, res) {
@@ -349,6 +559,7 @@ async function init({ router }) {
   groups = require.main.require('./src/groups');
   meta = require.main.require('./src/meta');
   emailer = require.main.require('./src/emailer');
+  notifications = require.main.require('./src/notifications');
   routeHelpers = require.main.require('./src/routes/helpers');
 
   // filter:navigation.available only exposes choices in ACP; it does not
@@ -378,10 +589,16 @@ async function init({ router }) {
   await navigationAdmin.save(navigationItems);
 
   if (retentionTimer) clearInterval(retentionTimer);
+  if (pendingNotificationTimer) clearInterval(pendingNotificationTimer);
   const runRetention = () => all().catch(err => console.error('[contact-inbox] retention cleanup failed:', err.message));
   void runRetention();
   retentionTimer = setInterval(runRetention, 60 * 60 * 1000);
   if (typeof retentionTimer.unref === 'function') retentionTimer.unref();
+  void processPendingNotifications().catch(err => console.error('[contact-inbox] notification scheduler failed:', err.message));
+  pendingNotificationTimer = setInterval(() => {
+    processPendingNotifications().catch(err => console.error('[contact-inbox] notification scheduler failed:', err.message));
+  }, 15000);
+  if (typeof pendingNotificationTimer.unref === 'function') pendingNotificationTimer.unref();
   routeHelpers.setupAdminPageRoute(router, '/admin/plugins/contact-inbox', [staffOnly], adminPage);
   routeHelpers.setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], forumPage);
   routeHelpers.setupPageRoute(router, '/plugins/contact-inbox/history', [staffOnly], historyPage);
@@ -391,13 +608,15 @@ async function init({ router }) {
 async function addRoutes({ router, middleware, helpers }) {
   apiHelpers = helpers;
   routeHelpers = routeHelpers || require.main.require('./src/routes/helpers');
-  const publicMw = [middleware.applyCSRF];
+  const publicMw = [publicSubmitProtection(middleware)];
   const staffMw = [staffOnly];
   const staffWriteMw = [staffOnly, middleware.applyCSRF];
   const adminMw = [staffOnly];
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions', publicMw, submit);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/submissions', staffMw, list);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/submissions/:id', staffMw, detail);
+  routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/read', staffWriteMw, markSubmissionRead);
+  routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/unread', staffWriteMw, markSubmissionUnread);
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/submissions/:id', staffWriteMw, update);
   routeHelpers.setupApiRoute(router, 'delete', '/contact-inbox/submissions/:id', staffWriteMw, remove);
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/delete', staffWriteMw, remove);
@@ -444,5 +663,6 @@ module.exports = {
   addRoutes,
   addAdminNavigation,
   addNavigation,
+  addNotificationType,
   _test: { clean, validEmail },
 };
