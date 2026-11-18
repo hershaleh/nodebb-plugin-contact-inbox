@@ -507,6 +507,7 @@ async function saveSettings(req, res) {
   const retentionDays = Math.max(0, Math.min(3650, Number(body.retentionDays) || 0));
   const maxPerHour = Math.max(1, Math.min(30, Number(body.maxPerHour) || 5));
   const submitterNotificationDelayMinutes = Math.max(1, Math.min(10080, Number(body.submitterNotificationDelayMinutes) || 5));
+  const currentConfig = await config();
   await meta.settings.set(ID, {
     allowedGroups,
     retentionDays,
@@ -514,7 +515,9 @@ async function saveSettings(req, res) {
     emailReplies: body.emailReplies === true && mailConfigured(),
     notifySubmitter: body.notifySubmitter === true,
     submitterNotificationDelayMinutes,
-    notifyStaffInApp: body.notifyStaffInApp === true,
+    // Keep the former global value only as a migration default for staff
+    // members who have not yet saved their personal forum-notification choice.
+    notifyStaffInApp: currentConfig.notifyStaffInApp,
   });
   return send(res, 200, { success: true });
 }
