@@ -99,3 +99,9 @@
 .ci-settings-form .ci-extra-emails{max-width:560px}
 .ci-settings-form .ci-extra-email-row .btn{margin:0}
 .ci-settings-form>.btn{margin-top:16px}
+
+/* Keep the card action menu visible and above theme card content. */
+.contact-inbox-page .ci-row{position:relative!important;padding-inline-start:48px!important;overflow:visible!important}
+.contact-inbox-page .ci-card-menu{position:absolute!important;top:6px!important;left:6px!important;z-index:30!important;display:block!important;visibility:visible!important;opacity:1!important}
+.contact-inbox-page .ci-menu-trigger{display:flex!important;align-items:center!important;justify-content:center!important;width:34px!important;height:34px!important;padding:0!important;border:1px solid var(--bs-border-color,#ccc)!important;border-radius:6px!important;background:var(--bs-body-bg,#fff)!important;color:var(--bs-body-color,#222)!important;font-size:25px!important;line-height:1!important;visibility:visible!important;opacity:1!important}
+.contact-inbox-page .ci-menu{z-index:40!important}
