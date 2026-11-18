@@ -393,7 +393,6 @@ async function reply(req, res) {
   if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
   const message = clean(req.body?.message, 10000);
   if (!message) return send(res, 400, { error: 'יש להזין תוכן לתשובה' });
-  const cfg = await config();
   const sendEmail = req.body?.sendEmail === true;
   if (sendEmail) {
     if (!mailConfigured()) {
@@ -535,7 +534,6 @@ async function getSettings(req, res) {
 }
 
 async function getCapabilities(req, res) {
-  const cfg = await config();
   return send(res, 200, { smtpConfigured: mailConfigured(), isAdmin: await user.isAdministrator(req.uid) });
 }
 
