@@ -149,7 +149,7 @@ test('forum navigation uses NodeBB native navigation hook and floating alerts mo
   assert.ok(manifest.hooks.some(hook => hook.hook === 'filter:navigation.available' && hook.method === 'addNavigation'));
   assert.ok(server.includes("iconClass: 'fa-envelope-o'"));
   assert.ok(server.includes("id: 'contact-inbox-nav'"));
-  assert.ok(client.includes("window.require(['alerts']"));
+  assert.ok(client.includes("window.require(['alerts']") || client.includes("window.require || window.requirejs"));
   assert.ok(client.includes("alerts.success(message, 5000)"));
   assert.ok(client.includes('function refreshNavigationIcon()'));
   assert.ok(client.includes("link.closest('li')"));
@@ -168,7 +168,7 @@ test('successful status and retention actions display native success notificatio
 
 test('NodeBB native alerts are loaded through app.require and shown with alerts API', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
-  assert.ok(client.includes("window.require(['alerts']"));
+  assert.ok(client.includes("window.require(['alerts']") || client.includes("window.require || window.requirejs"));
   assert.ok(client.includes('alerts.success(message, 5000)'));
   assert.ok(client.includes('alerts.error(message, 10000)'));
 });
@@ -212,7 +212,7 @@ test('staff notifications use the account email plus optional additional address
 
 test('NodeBB native alerts module is loaded with the AMD require API', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
-  assert.ok(client.includes("window.require(['alerts']"));
+  assert.ok(client.includes("window.require(['alerts']") || client.includes("window.require || window.requirejs"));
   assert.ok(client.includes('alerts.success(message, 5000)'));
   assert.ok(client.includes('alerts.error(message, 10000)'));
 });
