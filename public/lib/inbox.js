@@ -356,6 +356,24 @@
           detail.append(history);
         }
         const actions = el('div', 'ci-actions');
+        if (view === 'active' && !item.readByMe) {
+          const markRead = el('button', 'btn btn-default', 'סמן כנקרא');
+          markRead.type = 'button';
+          markRead.title = 'הפנייה תישאר פתוחה וזמינה לשאר חברי הצוות, אך לא תיספר כחדשה עבורך.';
+          markRead.addEventListener('click', async () => {
+            markRead.disabled = true;
+            try {
+              await request('/submissions/' + encodeURIComponent(id) + '/read', { method: 'POST', body: '{}' });
+              await openItem(id);
+              window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
+              await notify('הפנייה סומנה כנקראה עבורך. היא נשארה פתוחה לטיפול של הצוות.', 'success');
+            } catch (err) {
+              await notify(err.message || 'לא ניתן לסמן את הפנייה כנקראה.', 'danger');
+              markRead.disabled = false;
+            }
+          });
+          actions.append(markRead);
+        }
         const chat = el('button', 'btn btn-default', 'התחלת צ׳אט עם המשתמש');
         chat.type = 'button'; chat.disabled = !item.uid || !item.username;
         chat.title = chat.disabled ? 'הפנייה לא משויכת לחשבון משתמש בפורום' : '';
