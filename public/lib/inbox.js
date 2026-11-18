@@ -560,7 +560,34 @@
     }
   }
 
-  function start() { refreshNavigationIcon(); initInbox(); }
+  // NodeBB stores notifications in the notification center, but does not
+  // automatically show a toast for every custom notification type. Display
+  // the staff inbox notification through NodeBB's native toast system.
+  function bindStaffNotificationToast() {
+    const socket = window.socket;
+    if (!socket || typeof socket.on !== 'function' || socket.__ciStaffToastBound) return;
+    socket.__ciStaffToastBound = true;
+    socket.on('event:new_notification', async data => {
+      const notification = data && data.notification;
+      if (!notification || notification.type !== 'contact-inbox-new') return;
+      try {
+        if (!window.app || typeof window.app.require !== 'function') return;
+        const alerts = await window.app.require('alerts');
+        if (alerts && typeof alerts.alert === 'function') {
+          alerts.alert({
+            message: 'התקבלה פנייה חדשה בתיבת הפניות.',
+            type: 'info',
+            timeout: 7000,
+            clickfn: () => window.location.assign(page),
+          });
+        }
+      } catch (err) {
+        console.error('[contact-inbox] could not display staff notification toast:', err);
+      }
+    });
+  }
+
+  function start() { bindStaffNotificationToast(); refreshNavigationIcon(); initInbox(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
   if ($) $(window).on('action:ajaxify.end', start);
   window.addEventListener('contact-inbox:refresh-unread', refreshNavigationIcon);
