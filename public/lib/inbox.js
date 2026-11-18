@@ -476,8 +476,11 @@
         const rateInput = el('input', 'form-control'); rateInput.type = 'number'; rateInput.min = '1'; rateInput.max = '30'; rateInput.value = settings.maxPerHour || 5;
         const repliesLabel = el('label', 'checkbox', 'אפשר שליחת תשובות בדוא״ל'); const repliesInput = el('input'); repliesInput.type = 'checkbox'; repliesInput.checked = !!settings.emailReplies; repliesLabel.prepend(repliesInput);
         const smtpWarning = !settings.smtpConfigured
-          ? el('p', 'text-muted ci-smtp-warning', 'SMTP או כתובת השולח אינם מוגדרים; שליחת תשובות לא תהיה זמינה.')
+          ? el('p', 'text-muted ci-smtp-warning', 'שליחת הדוא״ל של NodeBB אינה פעילה כרגע. לאחר הפעלת SMTP בהגדרות הדוא״ל של NodeBB, האזהרה תיעלם אוטומטית.')
           : null;
+        const repliesSetting = el('div', 'ci-email-replies-setting');
+        repliesSetting.append(repliesLabel);
+        if (smtpWarning) repliesSetting.append(smtpWarning);
         const retentionLabel = el('label', '', 'מחיקה אוטומטית של פניות מההיסטוריה לאחר (ימים; 0 = ללא מחיקה אוטומטית)');
         const retentionInput = el('input', 'form-control'); retentionInput.type = 'number'; retentionInput.min = '0'; retentionInput.max = '3650'; retentionInput.value = settings.retentionDays || 0;
         const submitterNotifyLabel = el('label', 'checkbox', 'שליחת התראת אישור למשתמש רשום לאחר שליחת פנייה');
@@ -486,9 +489,8 @@
         const submitterDelayInput = el('input', 'form-control'); submitterDelayInput.type = 'number'; submitterDelayInput.min = '1'; submitterDelayInput.max = '10080'; submitterDelayInput.step = '1'; submitterDelayInput.value = settings.submitterNotificationDelayMinutes || 5;
         const staffNotifyLabel = el('label', 'checkbox', 'שליחת התראות על פנייה חדשה לחברי הקבוצות המורשות');
         const staffNotifyInput = el('input'); staffNotifyInput.type = 'checkbox'; staffNotifyInput.checked = !!settings.notifyStaffInApp; staffNotifyLabel.prepend(staffNotifyInput);
-        form.append(el('h3', '', 'הגדרות מנהל'), groupsLabel, groupsWrap, rateLabel, rateInput, repliesLabel);
-        if (smtpWarning) form.append(smtpWarning);
-        form.append(retentionLabel, retentionInput,
+        form.append(el('h3', '', 'הגדרות מנהל'), groupsLabel, groupsWrap, rateLabel, rateInput, repliesSetting,
+          retentionLabel, retentionInput,
           el('h4', '', 'התראת אישור לפונה'), submitterNotifyLabel, submitterDelayLabel, submitterDelayInput,
           el('p', 'text-muted', 'ההתראה תופיע בדף ההתראות הרגיל של המשתמש, לאחר ההשהיה שנקבעה. אורחים לא יקבלו התראה זו.'),
           el('h4', '', 'התראות לצוות'), staffNotifyLabel,
