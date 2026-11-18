@@ -530,19 +530,18 @@
         const submitterNotifyInput = el('input'); submitterNotifyInput.type = 'checkbox'; submitterNotifyInput.checked = !!settings.notifySubmitter; submitterNotifyLabel.prepend(submitterNotifyInput);
         const submitterDelayLabel = el('label', '', 'השהיה לפני שליחת ההתראה (בדקות)');
         const submitterDelayInput = el('input', 'form-control'); submitterDelayInput.type = 'number'; submitterDelayInput.min = '1'; submitterDelayInput.max = '10080'; submitterDelayInput.step = '1'; submitterDelayInput.value = settings.submitterNotificationDelayMinutes || 5;
-        const staffNotifyLabel = el('label', 'checkbox', 'שליחת התראות על פנייה חדשה לחברי הקבוצות המורשות');
-        const staffNotifyInput = el('input'); staffNotifyInput.type = 'checkbox'; staffNotifyInput.checked = !!settings.notifyStaffInApp; staffNotifyLabel.prepend(staffNotifyInput);
         form.append(el('h3', '', 'הגדרות מנהל'), groupsLabel, groupsWrap, rateLabel, rateInput, repliesSetting,
           retentionLabel, retentionInput,
           el('h4', '', 'התראת אישור לפונה'), submitterNotifyLabel, submitterDelayLabel, submitterDelayInput,
-          el('p', 'text-muted', 'ההתראה תופיע בדף ההתראות הרגיל של המשתמש, לאחר ההשהיה שנקבעה. אורחים לא יקבלו התראה זו.'),
-          el('h4', '', 'התראות לצוות'), staffNotifyLabel,
-          el('p', 'text-muted', 'כל חברי הקבוצות המורשות יקבלו התראה צפה והתראה רגילה ב-NodeBB בכל פעם שתתקבל פנייה חדשה.'));
+          el('p', 'text-muted', 'ההתראה תופיע בדף ההתראות הרגיל של המשתמש, לאחר ההשהיה שנקבעה. אורחים לא יקבלו התראה זו.'));
         form.dataset.adminSettings = '1';
-        form._adminFields = { groupsWrap, rateInput, repliesInput, retentionInput, submitterNotifyInput, submitterDelayInput, staffNotifyInput };
+        form._adminFields = { groupsWrap, rateInput, repliesInput, retentionInput, submitterNotifyInput, submitterDelayInput };
       }
       const prefs = el('section', 'ci-personal-prefs');
       prefs.append(el('h3', '', 'העדפות התראות אישיות'));
+      const forumNotify = el('input', 'form-check-input'); forumNotify.type = 'checkbox';
+      const forumLabel = el('label', 'form-check form-switch ci-notify-switch', 'קבלת התראות בפורום על פנייה');
+      forumLabel.prepend(forumNotify);
       const personalNotify = el('input', 'form-check-input'); personalNotify.type = 'checkbox';
       const personalLabel = el('label', 'form-check form-switch ci-notify-switch', 'קבלת התראות דוא״ל לכתובת שבחשבון שלי');
       personalLabel.prepend(personalNotify);
@@ -556,15 +555,16 @@
         row.append(input, remove); extraEmails.append(row);
       }
       addEmail.addEventListener('click', () => addEmailField(''));
-      prefs.append(personalLabel, extraEmails, addEmail); form.append(prefs);
+      prefs.append(forumLabel, personalLabel, extraEmails, addEmail); form.append(prefs);
       const p = await request('/preferences');
+      forumNotify.checked = !!p.preferences.notifyInForum;
       personalNotify.checked = !!p.preferences.notify;
       (p.preferences.extraEmails || []).forEach(addEmailField);
       const save = el('button', 'btn btn-primary', 'שמירת הגדרות'); save.type = 'button';
       save.addEventListener('click', async () => {
         save.disabled = true;
         try {
-          await request('/preferences', { method: 'PUT', body: JSON.stringify({ notify: personalNotify.checked, extraEmails: Array.from(extraEmails.querySelectorAll('input')).map(input => input.value.trim()).filter(Boolean) }) });
+          await request('/preferences', { method: 'PUT', body: JSON.stringify({ notifyInForum: forumNotify.checked, notify: personalNotify.checked, extraEmails: Array.from(extraEmails.querySelectorAll('input')).map(input => input.value.trim()).filter(Boolean) }) });
           if (isAdmin && form._adminFields) {
             const f = form._adminFields;
             await request('/settings', { method: 'PUT', body: JSON.stringify({
@@ -572,8 +572,7 @@
               maxPerHour: Number(f.rateInput.value), retentionDays: Number(f.retentionInput.value) || 0,
               emailReplies: f.repliesInput.checked,
               notifySubmitter: f.submitterNotifyInput.checked,
-              submitterNotificationDelayMinutes: Number(f.submitterDelayInput.value) || 5,
-              notifyStaffInApp: f.staffNotifyInput.checked
+              submitterNotificationDelayMinutes: Number(f.submitterDelayInput.value) || 5
             }) });
           }
           await notify('ההגדרות נשמרו.', 'success');
