@@ -73,3 +73,29 @@
 
 #contact-inbox-nav .ci-nav-badge,.ci-nav-anchor .ci-nav-badge{position:absolute;top:-5px;inset-inline-start:-7px;z-index:10;pointer-events:none}
 #contact-inbox-nav .ci-nav-badge:not([hidden]),.ci-nav-anchor .ci-nav-badge:not([hidden]){display:inline-block!important}
+
+.ci-row{position:relative;cursor:pointer;padding-inline-start:42px}
+.ci-card-menu{position:absolute;top:7px;left:8px;z-index:5;direction:rtl}
+.ci-menu-trigger{width:30px;height:30px;border:0;border-radius:6px;background:transparent;color:var(--bs-secondary-color,#777);font-size:23px;line-height:1;cursor:pointer}
+.ci-menu-trigger:hover,.ci-menu-trigger:focus-visible{background:var(--bs-tertiary-bg,#eee);color:var(--bs-emphasis-color,#222)}
+.ci-menu{position:absolute;top:32px;left:0;min-width:205px;padding:5px;background:var(--bs-body-bg,#fff);border:1px solid var(--bs-border-color,#ddd);border-radius:8px;box-shadow:0 5px 18px rgba(0,0,0,.16);z-index:20}
+.ci-menu[hidden]{display:none!important}
+.ci-menu-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 11px;border:0;border-radius:5px;background:transparent;color:var(--bs-body-color,#222);text-align:right;font:inherit;white-space:nowrap;cursor:pointer}
+.ci-menu-item i{width:17px;color:var(--bs-secondary-color,#777);text-align:center}
+.ci-menu-item:hover:not(:disabled){background:var(--bs-tertiary-bg,#f1f1f1)}
+.ci-menu-item:disabled{opacity:.42;cursor:not-allowed}
+.ci-read-state{display:inline-block;margin-top:7px;font-size:.78em;color:var(--bs-secondary-color,#777)}
+.ci-unread-state{font-weight:700;color:var(--bs-primary,#337ab7)}
+.ci-settings-section{margin:0 0 18px;padding:16px;border:1px solid var(--bs-border-color,#ddd);border-radius:10px}
+.ci-settings-section>h3{margin:0 0 16px;font-size:1.2rem}
+.ci-settings-subsection{padding:12px 0;border-top:1px solid var(--bs-border-color,#e5e5e5)}
+.ci-settings-subsection:first-of-type{border-top:0}
+.ci-settings-subsection h4{margin:0 0 12px;font-size:1.02rem;font-weight:700}
+.ci-settings-form .ci-settings-subsection>label:not(.checkbox){display:block;margin:12px 0 6px}
+.ci-settings-form .ci-setting-checkbox{display:flex;align-items:center;gap:9px;margin:10px 0}
+.ci-settings-form .ci-setting-checkbox input{margin:0}
+.ci-settings-form .ci-personal-prefs{margin:0;padding:12px 0 0;border-top:1px solid var(--bs-border-color,#e5e5e5)}
+.ci-settings-form .ci-personal-prefs label{display:flex;align-items:center;gap:9px;margin:12px 0}
+.ci-settings-form .ci-extra-emails{max-width:560px}
+.ci-settings-form .ci-extra-email-row .btn{margin:0}
+.ci-settings-form>.btn{margin-top:16px}
