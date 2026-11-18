@@ -77,32 +77,3 @@
 #contact-inbox-nav:focus-visible {
   background-color: var(--bs-secondary-bg, #e9ecef) !important;
 }
-
-
-/* Place the compact badge on the physical right, toward the page interior.
-   Do not use Bootstrap's start-100 / translate-middle utilities here:
-   in RTL they resolve to the opposite physical side. */
-#contact-inbox-nav {
-  position: relative !important;
-}
-#contact-inbox-nav > .ci-nav-count-compact {
-  position: absolute !important;
-  top: 50% !important;
-  left: calc(100% + 4px) !important;
-  right: auto !important;
-  inset-inline-start: auto !important;
-  inset-inline-end: auto !important;
-  transform: translateY(-50%) !important;
-}
-
-/* The inbox icon is an inline outline SVG, independent of icon fonts. */
-#contact-inbox-nav .ci-nav-envelope {
-  display: inline-block;
-  flex: 0 0 20px;
-  width: 20px;
-  height: 20px;
-  overflow: visible;
-  fill: none;
-  stroke: currentColor;
-  vertical-align: middle;
-}
