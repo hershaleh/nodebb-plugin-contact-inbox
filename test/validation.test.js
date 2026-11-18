@@ -149,8 +149,8 @@ test('forum navigation uses NodeBB native navigation hook and floating alerts mo
   assert.ok(manifest.hooks.some(hook => hook.hook === 'filter:navigation.available' && hook.method === 'addNavigation'));
   assert.ok(server.includes("iconClass: 'fa-envelope-o'"));
   assert.ok(server.includes("id: 'contact-inbox-nav'"));
-  assert.ok(client.includes("window.app.alert({"));
-  assert.ok(client.includes("location: 'right-top'"));
+  assert.ok(client.includes("amdRequire(['alerts']"));
+  assert.ok(client.includes("alerts.success(message, 5000)"));
   assert.ok(client.includes('function refreshNavigationIcon()'));
   assert.ok(client.includes("link.closest('li')"));
   assert.ok(client.includes("#logged-in-menu > li.chats, #chat_dropdown"));
@@ -168,9 +168,8 @@ test('successful status and retention actions display native success notificatio
 
 test('NodeBB native alerts are loaded through app.require and shown with alerts API', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
-  assert.ok(client.includes("window.app.alert({"));
-  assert.ok(client.includes("window.app.alert({"));
-  assert.ok(client.includes("location: 'right-top'"));
+  assert.ok(client.includes("amdRequire(['alerts']"));
+  assert.ok(client.includes("alerts.error(message, 10000)"));
 });
 
 test('plugin ensures its navigation item is enabled in the live NodeBB menu', () => {
@@ -212,7 +211,30 @@ test('staff notifications use the account email plus optional additional address
 
 test('NodeBB native alerts module is loaded with the AMD require API', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
-  assert.ok(client.includes("window.app.alert({"));
-  assert.ok(client.includes("window.app.alert({"));
-  assert.ok(client.includes("location: 'right-top'"));
+  assert.ok(client.includes("amdRequire(['alerts']"));
+});
+
+
+test('navigation badge falls back to active submission count and remains visible', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const scss = fs.readFileSync(path.join(root, 'public/lib/inbox.scss'), 'utf8');
+  assert.ok(client.includes("request('/submissions?view=active')"));
+  assert.ok(client.includes("badge.style.display = count === 0 ? 'none' : 'inline-block'"));
+  assert.ok(scss.includes('.ci-nav-badge:not([hidden]){display:inline-block!important}'));
+});
+
+test('retention policy is edited in regular admin settings, not history tools', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
+  assert.ok(client.includes('const retentionInput = el(\'input\', \'form-control\')'));
+  assert.ok(client.includes('retentionDays: Number(f.retentionInput.value) || 0'));
+  assert.ok(!template.includes('id="ci-retention-admin"'));
+  assert.ok(!client.includes("getElementById('ci-retention-save')"));
+});
+
+test('deletion uses a direct confirmation and reports both success and failure', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(client.includes("window.confirm('למחוק לצמיתות את הפנייה ואת כל התשובות שלה?')"));
+  assert.ok(client.includes("method: 'POST', body: '{}'"));
+  assert.ok(client.includes("await notify(err.message || 'מחיקת הפנייה נכשלה.', 'danger')"));
 });
