@@ -94,7 +94,7 @@ test('inbox separates active submissions from resolved history without read-stat
 test('inbox uses in-forum modal dialogs and disables unavailable actions', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
   const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
-  assert.ok(client.includes("className = 'modal fade ci-modal'"));
+  assert.ok(client.includes("window.bootbox.dialog({"));
   assert.ok(client.includes('else closeModal(wrap)'));
   assert.ok(client.includes("chat.disabled = !item.uid || !item.username"));
   assert.ok(client.includes("email.disabled = !settings || !settings.emailReplies || !settings.smtpConfigured"));
@@ -147,8 +147,8 @@ test('forum navigation icon clones the native NodeBB chat control and shows nati
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin.json'), 'utf8'));
   assert.ok(!manifest.hooks.some(hook => hook.hook === 'filter:navigation.available'));
-  assert.ok(client.includes("window.app.require('components')"));
-  assert.ok(client.includes("components.get('chat/icon')"));
+  assert.ok(client.includes("document.querySelector('[component=\"chat/dropdown\"]')"));
+  assert.ok(client.includes("listItem.appendChild(navNode)"));
   assert.ok(client.includes("id = 'contact-inbox-nav'"));
   assert.ok(client.includes("className = 'fa fa-envelope-o'"));
   assert.ok(client.includes("icon.classList.toggle('unread-count', count > 0)"));
