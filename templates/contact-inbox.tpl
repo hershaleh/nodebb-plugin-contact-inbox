@@ -27,8 +27,6 @@
     </div>
   </main>
   <main id="ci-settings-page" hidden>
-    <h2>הגדרות תיבת הפניות</h2>
-    <p class="text-muted">הגדרות אישיות והגדרות ניהול. כולל הגדרות מחיקת היסטוריית הפניות.</p>
     <div id="ci-settings-content" class="ci-settings-content"><p>טוען הגדרות…</p></div>
   </main>
 </div>
