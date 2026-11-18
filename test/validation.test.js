@@ -151,7 +151,7 @@ test('forum navigation uses NodeBB native navigation hook and floating alerts mo
   assert.ok(server.includes("iconClass: 'fa-envelope'"));
   assert.ok(server.includes("id: 'contact-inbox-nav'"));
   assert.ok(client.includes("window.require(['alerts']"));
-  assert.ok(client.includes("alerts.success(message)"));
+  assert.ok(client.includes("alerts.success(message, 5000)"));
   assert.ok(client.includes('function refreshNavigationIcon()'));
 });
 
