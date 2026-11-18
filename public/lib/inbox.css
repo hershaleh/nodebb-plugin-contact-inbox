@@ -77,3 +77,11 @@
 #contact-inbox-nav:focus-visible {
   background-color: var(--bs-secondary-bg, #e9ecef) !important;
 }
+
+
+/* The sidebar is on the physical left edge. Bootstrap's logical start-100
+   flips in RTL, so pin the compact counter to the physical right of the icon. */
+#contact-inbox-nav .ci-nav-count-compact {
+  left: 100% !important;
+  right: auto !important;
+}
