@@ -481,12 +481,16 @@
         const submitterNotifyInput = el('input'); submitterNotifyInput.type = 'checkbox'; submitterNotifyInput.checked = !!settings.notifySubmitter; submitterNotifyLabel.prepend(submitterNotifyInput);
         const submitterDelayLabel = el('label', '', 'השהיה לפני שליחת ההתראה (בדקות)');
         const submitterDelayInput = el('input', 'form-control'); submitterDelayInput.type = 'number'; submitterDelayInput.min = '1'; submitterDelayInput.max = '10080'; submitterDelayInput.step = '1'; submitterDelayInput.value = settings.submitterNotificationDelayMinutes || 5;
+        const staffNotifyLabel = el('label', 'checkbox', 'שליחת התראות על פנייה חדשה לחברי הקבוצות המורשות');
+        const staffNotifyInput = el('input'); staffNotifyInput.type = 'checkbox'; staffNotifyInput.checked = !!settings.notifyStaffInApp; staffNotifyLabel.prepend(staffNotifyInput);
         form.append(el('h3', '', 'הגדרות מנהל'), groupsLabel, groupsWrap, rateLabel, rateInput, repliesLabel, retentionLabel, retentionInput,
           el('h4', '', 'התראת אישור לפונה'), submitterNotifyLabel, submitterDelayLabel, submitterDelayInput,
           el('p', 'text-muted', 'ההתראה תופיע בדף ההתראות הרגיל של המשתמש, לאחר ההשהיה שנקבעה. אורחים לא יקבלו התראה זו.'),
+          el('h4', '', 'התראות לצוות'), staffNotifyLabel,
+          el('p', 'text-muted', 'כל חברי הקבוצות המורשות יקבלו התראה צפה והתראה רגילה ב-NodeBB בכל פעם שתתקבל פנייה חדשה.'),
           el('p', 'text-muted', settings.smtpConfigured ? 'SMTP וכתובת השולח מוגדרים.' : 'SMTP או כתובת השולח אינם מוגדרים; שליחת תשובות לא תהיה זמינה.'));
         form.dataset.adminSettings = '1';
-        form._adminFields = { groupsWrap, rateInput, repliesInput, retentionInput, submitterNotifyInput, submitterDelayInput };
+        form._adminFields = { groupsWrap, rateInput, repliesInput, retentionInput, submitterNotifyInput, submitterDelayInput, staffNotifyInput };
       }
       const prefs = el('section', 'ci-personal-prefs');
       prefs.append(el('h3', '', 'העדפות התראות אישיות'));
@@ -519,7 +523,8 @@
               maxPerHour: Number(f.rateInput.value), retentionDays: Number(f.retentionInput.value) || 0,
               emailReplies: f.repliesInput.checked,
               notifySubmitter: f.submitterNotifyInput.checked,
-              submitterNotificationDelayMinutes: Number(f.submitterDelayInput.value) || 5
+              submitterNotificationDelayMinutes: Number(f.submitterDelayInput.value) || 5,
+              notifyStaffInApp: f.staffNotifyInput.checked
             }) });
           }
           await notify('ההגדרות נשמרו.', 'success');
