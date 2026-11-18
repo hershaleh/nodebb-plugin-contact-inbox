@@ -66,6 +66,25 @@ async function staffOnly(req, res, next) {
   } catch (err) { return next(err); }
 }
 
+// Public submissions must work for guests, whose CSRF token may not be
+// available on custom pages. Authenticated users retain NodeBB CSRF checks;
+// guest requests are restricted to the configured forum origin.
+function publicSubmitProtection(req, res, next) {
+  if (Number(req.uid) > 0) return middleware.applyCSRF(req, res, next);
+  let expectedOrigin = '';
+  let requestOrigin = String(req.headers.origin || '').trim();
+  try { expectedOrigin = new URL(meta.config.url).origin; } catch (err) {
+    return send(res, 403, { error: 'לא ניתן לאמת את מקור שליחת הפנייה. יש לבדוק את כתובת הפורום בהגדרות NodeBB.' });
+  }
+  if (!requestOrigin && req.headers.referer) {
+    try { requestOrigin = new URL(req.headers.referer).origin; } catch (err) { requestOrigin = ''; }
+  }
+  if (!requestOrigin || requestOrigin !== expectedOrigin) {
+    return send(res, 403, { error: 'שליחת פנייה מותרת רק מתוך אתר הפורום.' });
+  }
+  return next();
+}
+
 async function get(idValue) {
   if (!/^[a-f0-9]{32}$/.test(String(idValue))) return null;
   return db.getObject(key(idValue));
@@ -546,7 +565,7 @@ async function init({ router }) {
 async function addRoutes({ router, middleware, helpers }) {
   apiHelpers = helpers;
   routeHelpers = routeHelpers || require.main.require('./src/routes/helpers');
-  const publicMw = [middleware.applyCSRF];
+  const publicMw = [publicSubmitProtection];
   const staffMw = [staffOnly];
   const staffWriteMw = [staffOnly, middleware.applyCSRF];
   const adminMw = [staffOnly];
