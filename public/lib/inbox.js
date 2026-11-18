@@ -248,6 +248,30 @@
     wrap.remove();
   }
 
+  // Mark only this plugin's staff notifications as read when the inbox is opened.
+  // Other NodeBB notifications remain untouched.
+  function markStaffInboxNotificationsRead() {
+    const socket = window.socket;
+    if (!socket || typeof socket.emit !== 'function') return;
+    socket.emit('notifications.get', {}, (err, data) => {
+      if (err) {
+        console.error('[contact-inbox] could not load staff notifications:', err);
+        return;
+      }
+      const unread = data && Array.isArray(data.unread) ? data.unread : [];
+      const inboxNotifications = unread.filter(notification =>
+        notification && notification.type === 'contact-inbox-new' && notification.nid
+      );
+      inboxNotifications.forEach(notification => {
+        socket.emit('notifications.markRead', notification.nid, markErr => {
+          if (markErr) {
+            console.error('[contact-inbox] could not mark staff notification as read:', markErr);
+          }
+        });
+      });
+    });
+  }
+
   function initInbox() {
     const root = document.querySelector('.contact-inbox-page');
     if (!root || root.dataset.initialized) return;
@@ -261,6 +285,7 @@
     const settingsButton = document.getElementById('ci-settings-button');
     const routePath = (window.location.pathname || '').replace(/\/+$/, '');
     const isSettingsPage = routePath.endsWith('/settings');
+    if (!isSettingsPage) markStaffInboxNotificationsRead();
     let view = routePath.endsWith('/history') ? 'history' : 'active', activeId = null, settings = null, isAdmin = false;
 
     const el = (tag, cls, value) => {
