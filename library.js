@@ -12,7 +12,7 @@ const DEFAULTS = Object.freeze({
   notifySubmitter: false,
   submitterNotificationDelayMinutes: 5,
 });
-let db, user, groups, meta, routeHelpers, apiHelpers, emailer, retentionTimer, pendingNotificationTimer, notifications;
+let db, user, groups, meta, routeHelpers, apiHelpers, emailer, retentionTimer, pendingNotificationTimer, notifications, processingNotifications = false;
 
 const clean = (value, max) => String(value == null ? '' : value).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 const validEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -134,35 +134,40 @@ async function scheduleSubmitterNotification(submission, cfg) {
 }
 
 async function processPendingNotifications() {
-  const dueIds = await db.getSortedSetRangeByScore(PREFIX + 'pending-notifications', 0, 49, '-inf', Date.now());
-  if (!dueIds.length) return;
-  for (const submissionId of dueIds) {
-    const jobKey = PREFIX + 'pending-notification:' + submissionId;
-    try {
-      const job = await db.getObject(jobKey);
-      if (!job || !Number(job.uid)) {
+  if (processingNotifications) return;
+  processingNotifications = true;
+  try {
+    const dueIds = await db.getSortedSetRangeByScore(PREFIX + 'pending-notifications', 0, 49, '-inf', Date.now());
+    for (const submissionId of dueIds) {
+      const jobKey = PREFIX + 'pending-notification:' + submissionId;
+      try {
+        const job = await db.getObject(jobKey);
+        if (!job || !Number(job.uid)) {
+          await db.sortedSetRemove(PREFIX + 'pending-notifications', submissionId);
+          await db.delete(jobKey);
+          continue;
+        }
+        const nid = 'contact-inbox:received:' + submissionId;
+        let notification = await notifications.get(nid);
+        if (!notification) {
+          notification = await notifications.create({
+            nid,
+            type: 'contact-inbox-received',
+            bodyShort: 'פנייתך התקבלה. היא תיענה בהקדם.',
+            from: 0,
+            path: '/plugins/contact-inbox',
+          });
+        }
+        if (notification) await notifications.push(notification, [Number(job.uid)]);
         await db.sortedSetRemove(PREFIX + 'pending-notifications', submissionId);
         await db.delete(jobKey);
-        continue;
+      } catch (err) {
+        // Keep the persistent job so the next scheduler tick can retry it.
+        console.error('[contact-inbox] submitter notification failed:', submissionId, err.message);
       }
-      const nid = 'contact-inbox:received:' + submissionId;
-      let notification = await notifications.get(nid);
-      if (!notification) {
-        notification = await notifications.create({
-          nid,
-          type: 'contact-inbox-received',
-          bodyShort: 'פנייתך התקבלה. היא תיענה בהקדם.',
-          from: 0,
-          path: '/plugins/contact-inbox',
-        });
-      }
-      if (notification) await notifications.push(notification, [Number(job.uid)]);
-      await db.sortedSetRemove(PREFIX + 'pending-notifications', submissionId);
-      await db.delete(jobKey);
-    } catch (err) {
-      // Keep the persistent job so the next scheduler tick can retry it.
-      console.error('[contact-inbox] submitter notification failed:', submissionId, err.message);
     }
+  } finally {
+    processingNotifications = false;
   }
 }
 
@@ -204,7 +209,11 @@ async function submit(req, res) {
     await db.setObject(key(item.id), item);
     await db.sortedSetAdd(PREFIX + 'submissions', item.createdAt, item.id);
     void notifyStaff(item);
-    void scheduleSubmitterNotification(item, cfg).catch(err => console.error('[contact-inbox] could not schedule submitter notification:', err.message));
+    try {
+      await scheduleSubmitterNotification(item, cfg);
+    } catch (err) {
+      console.error('[contact-inbox] could not schedule submitter notification:', err.message);
+    }
     return send(res, 201, { success: true, id: item.id, message: 'הפנייה התקבלה בהצלחה.' });
   } catch (err) {
     console.error('[contact-inbox] submit failed:', err);
