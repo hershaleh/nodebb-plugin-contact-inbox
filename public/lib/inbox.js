@@ -482,16 +482,19 @@
       const forumInput = el('input', 'form-check-input'); forumInput.type = 'checkbox'; forumInput.checked = !!p.preferences.notifyInForum;
       const forumLabel = el('label', 'form-check form-switch ci-notify-switch', 'קבלת התראות בפורום'); forumLabel.prepend(forumInput);
       const emailInput = el('input', 'form-check-input'); emailInput.type = 'checkbox'; emailInput.checked = !!p.preferences.notify;
+      emailInput.disabled = !settings.smtpConfigured;
       const emailLabel = el('label', 'form-check form-switch ci-notify-switch', 'קבלת התראות בדוא״ל לכתובת שבחשבון שלי'); emailLabel.prepend(emailInput);
       const extraEmails = el('div', 'ci-extra-emails'), addEmail = el('button', 'btn btn-default', '+ הוספת כתובת דוא״ל נוספת'); addEmail.type = 'button';
       function addEmailField(value) { const row = el('div', 'ci-extra-email-row'), input = el('input', 'form-control'), remove = el('button', 'btn btn-default', 'הסרה'); input.type = 'email'; input.placeholder = 'כתובת דוא״ל נוספת'; input.value = value || ''; remove.type = 'button'; remove.addEventListener('click', () => row.remove()); row.append(input, remove); extraEmails.append(row); }
       addEmail.addEventListener('click', () => addEmailField('')); (p.preferences.extraEmails || []).forEach(addEmailField);
-      prefs.append(forumLabel, emailLabel, extraEmails, addEmail); alerts.append(prefs); form.append(alerts);
+      prefs.append(forumLabel, emailLabel);
+      if (!settings.smtpConfigured) prefs.append(el('p', 'text-muted ci-smtp-warning', 'התראות דוא״ל אינן זמינות עד להפעלת SMTP בהגדרות הדוא״ל של NodeBB.'));
+      prefs.append(extraEmails, addEmail); alerts.append(prefs); form.append(alerts);
       const save = el('button', 'btn btn-primary', 'שמירת הגדרות'); save.type = 'button';
       save.addEventListener('click', async () => {
         save.disabled = true;
         try {
-          await request('/preferences', { method: 'PUT', body: JSON.stringify({ notifyInForum: forumInput.checked, notify: emailInput.checked, extraEmails: Array.from(extraEmails.querySelectorAll('input')).map(input => input.value.trim()).filter(Boolean) }) });
+          await request('/preferences', { method: 'PUT', body: JSON.stringify({ notifyInForum: forumInput.checked, notify: settings.smtpConfigured ? emailInput.checked : !!p.preferences.notify, extraEmails: Array.from(extraEmails.querySelectorAll('input')).map(input => input.value.trim()).filter(Boolean) }) });
           if (isAdmin && form._adminFields) { const f = form._adminFields; await request('/settings', { method: 'PUT', body: JSON.stringify({ allowedGroups: Array.from(f.groupsWrap.querySelectorAll('input:checked')).map(input => input.value), maxPerHour: Number(f.rateInput.value), retentionDays: Number(f.retentionInput.value) || 0, notifySubmitter: submitterInput.checked, submitterNotificationDelayMinutes: Number(delayInput.value) || 5 }) }); }
           await notify('ההגדרות נשמרו.', 'success');
         } catch (err) { await notify(err.message, 'danger'); } finally { save.disabled = false; }
