@@ -11,6 +11,7 @@
 .contact-inbox-list,.contact-inbox-detail{min-width:0;min-height:420px;padding:16px;border:1px solid var(--bs-border-color,#ddd);border-radius:12px;background:var(--bs-body-bg,#fff)}
 .contact-inbox-list{max-height: min(72vh,760px);overflow-y:auto;overscroll-behavior:contain}
 .ci-row{display:block;width:100%;max-width:100%;margin:0 0 9px;padding:13px;border:1px solid var(--bs-border-color,#ddd);border-radius:9px;background:transparent;color:inherit;text-align:left;white-space:normal;overflow-wrap:anywhere}
+.ci-row-unread{background:var(--bs-tertiary-bg,#f5f5f5);border-inline-start:4px solid var(--bs-primary,#337ab7)}.ci-row-unread .ci-row-top strong,.ci-row-unread .ci-row-meta{font-weight:800;color:var(--bs-emphasis-color,#212529)}
 .ci-row:hover,.ci-row:focus-visible{border-color:var(--bs-primary,#337ab7)}
 .ci-row.active{border-color:var(--bs-primary,#337ab7);background:rgba(51,122,183,.07)}
 .ci-row-top{align-items:flex-start;flex-wrap:wrap}
