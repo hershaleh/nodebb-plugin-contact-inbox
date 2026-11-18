@@ -296,7 +296,7 @@
             { label: 'מחיקה לצמיתות', className: 'btn-danger', onClick: async (wrap, button) => {
               button.disabled = true;
               try {
-                const result = await request('/submissions/' + encodeURIComponent(id) + '/delete', { method: 'POST', body: '{}' });
+                const result = await request('/submissions/' + encodeURIComponent(id), { method: 'DELETE' });
                 if (!result || result.success !== true || result.deleted !== true || result.id !== id) {
                   throw new Error('השרת לא אישר שהפנייה נמחקה בפועל.');
                 }
