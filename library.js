@@ -8,7 +8,6 @@ const DEFAULTS = Object.freeze({
   allowedGroups: ['administrators'],
   retentionDays: 0,
   maxPerHour: 5,
-  emailNotifications: false,
   emailReplies: false,
 });
 let db, user, groups, meta, routeHelpers, apiHelpers, emailer, retentionTimer;
@@ -89,7 +88,6 @@ async function countUnread() {
 
 async function notifyStaff(submission) {
   const cfg = await config();
-  if (!cfg.emailNotifications) return;
   try {
     const staffUids = new Set();
     for (const groupName of cfg.allowedGroups) {
@@ -101,13 +99,17 @@ async function notifyStaff(submission) {
     }
     for (const uid of staffUids) {
       const prefs = await db.getObject(PREFIX + 'staff:' + uid) || {};
-      if (!prefs.notify || !validEmail(prefs.email || '')) continue;
-      await emailer.sendToEmail('contact-inbox-notification', prefs.email, null, {
-        subject: submission.subject,
-        name: submission.name,
-        message: submission.message,
-        inboxUrl: (meta.config.url || '').replace(/\/$/, '') + '/plugins/contact-inbox',
-      });
+      if (!prefs.notify) continue;
+      const accountEmail = await user.getUserField(Number(uid), 'email');
+      const recipients = [...new Set([accountEmail, ...(Array.isArray(prefs.extraEmails) ? prefs.extraEmails : [])].map(value => clean(value, 254).toLowerCase()).filter(validEmail))];
+      for (const recipient of recipients) {
+        await emailer.sendToEmail('contact-inbox-notification', recipient, null, {
+          subject: submission.subject,
+          name: submission.name,
+          message: submission.message,
+          inboxUrl: (meta.config.url || '').replace(/\/$/, '') + '/plugins/contact-inbox',
+        });
+      }
     }
   } catch (err) {
     console.error('[contact-inbox] staff notification failed:', err.message);
@@ -199,7 +201,7 @@ async function addNavigation(menu) {
     route: '/plugins/contact-inbox',
     id: 'contact-inbox-nav',
     title: 'תיבת פניות',
-    iconClass: 'fa-envelope',
+    iconClass: 'fa-envelope-o',
     textClass: 'visible-xs-inline',
     text: 'תיבת פניות',
   }]);
@@ -215,10 +217,11 @@ async function remove(req, res) {
   // even if the record remained visible in the inbox.
   await db.delete(key(item.id));
   await db.sortedSetRemove(PREFIX + 'submissions', item.id);
-  const [recordStillExists, indexStillContains] = await Promise.all([
-    db.exists(key(item.id)),
+  const [remainingRecord, indexStillContains] = await Promise.all([
+    db.getObject(key(item.id)),
     db.isSortedSetMember(PREFIX + 'submissions', item.id),
   ]);
+  const recordStillExists = !!remainingRecord;
   if (recordStillExists || indexStillContains) {
     console.error('[contact-inbox] deletion verification failed for submission:', item.id, {
       recordStillExists, indexStillContains,
@@ -288,16 +291,24 @@ async function unread(req, res) {
 }
 
 async function saveStaffPrefs(req, res) {
-  const email = clean(req.body?.email, 254).toLowerCase();
   const notify = req.body?.notify === true;
-  if (notify && !validEmail(email)) return send(res, 400, { error: 'כתובת דוא״ל לא תקינה' });
-  await db.setObject(PREFIX + 'staff:' + req.uid, { email, notify });
+  const extraEmails = Array.isArray(req.body?.extraEmails)
+    ? [...new Set(req.body.extraEmails.map(value => clean(value, 254).toLowerCase()).filter(Boolean))].slice(0, 20)
+    : [];
+  if (extraEmails.some(email => !validEmail(email))) return send(res, 400, { error: 'אחת מכתובות הדוא״ל הנוספות אינה תקינה' });
+  await db.setObject(PREFIX + 'staff:' + req.uid, { notify, extraEmails });
   return send(res, 200, { success: true });
 }
 
 async function getStaffPrefs(req, res) {
-  const prefs = await db.getObject(PREFIX + 'staff:' + req.uid) || { email: '', notify: false };
-  return send(res, 200, { preferences: prefs });
+  const prefs = await db.getObject(PREFIX + 'staff:' + req.uid) || { notify: false, extraEmails: [] };
+  return send(res, 200, { preferences: { notify: !!prefs.notify, extraEmails: Array.isArray(prefs.extraEmails) ? prefs.extraEmails : [] } });
+}
+
+async function getGroups(req, res) {
+  const available = await groups.getNonPrivilegeGroups('groups:createtime', 0, -1, { ephemeral: false });
+  const names = [...new Set(['administrators', 'Global Moderators', ...available.map(group => group && group.name).filter(Boolean)])];
+  return send(res, 200, { groups: names });
 }
 
 async function saveSettings(req, res) {
@@ -313,7 +324,6 @@ async function saveSettings(req, res) {
     allowedGroups,
     retentionDays,
     maxPerHour,
-    emailNotifications: body.emailNotifications === true,
     emailReplies: body.emailReplies === true && mailConfigured(),
   });
   return send(res, 200, { success: true });
@@ -407,6 +417,7 @@ async function addRoutes({ router, middleware, helpers }) {
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/replies', staffWriteMw, reply);
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/chat', staffWriteMw, openChat);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/unread', staffMw, unread);
+  routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/groups', adminMw, getGroups);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/preferences', staffMw, getStaffPrefs);
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/preferences', staffWriteMw, saveStaffPrefs);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/settings', adminMw, getSettings);
