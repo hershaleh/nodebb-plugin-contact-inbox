@@ -46,23 +46,55 @@
     if (navRefreshInProgress) return;
     navRefreshInProgress = true;
     try {
-      const route = page;
-      let item = document.getElementById('contact-inbox-nav');
-      let anchor = item && (item.matches('a') ? item : item.querySelector('a'));
-      if (!anchor) {
-        anchor = document.querySelector('a[href="' + route + '"], a[href$="/plugins/contact-inbox"]');
-        if (anchor) {
-          anchor.id = 'contact-inbox-nav';
-          item = anchor;
-        }
+      // This protected endpoint doubles as an authorization check. Do not
+      // expose the staff inbox link to users who cannot open the inbox.
+      let count;
+      try {
+        const result = await request('/unread');
+        count = Number(result.count);
+      } catch (apiError) {
+        return;
       }
-      // The server-side NodeBB navigation item is the source of truth.
-      // Do not make its existence depend on locating the unrelated chat control.
+      count = Number.isFinite(count) && count > 0 ? count : 0;
+
+      const route = page;
+      let anchor = document.querySelector('#contact-inbox-nav[href], a#contact-inbox-nav, a[href="' + route + '"], a[href$="/plugins/contact-inbox"]');
+      if (!anchor) {
+        // Some themes do not render plugin navigation items in the header.
+        // Insert beside NodeBB's own chat control instead of depending on
+        // a pre-existing inbox link.
+        const chatToggle = document.querySelector('[component="chat/dropdown"]');
+        const chatItem = chatToggle && (chatToggle.closest('li') || chatToggle.parentElement);
+        const navList = chatItem && chatItem.parentElement;
+        if (!chatToggle || !chatItem || !navList) return;
+
+        const item = document.createElement(chatItem.tagName.toLowerCase() === 'li' ? 'li' : 'li');
+        item.className = chatItem.className || 'nav-item';
+        anchor = document.createElement('a');
+        anchor.id = 'contact-inbox-nav';
+        anchor.className = 'nav-link';
+        anchor.href = route;
+        const icon = document.createElement('i');
+        icon.className = 'fa fa-envelope';
+        icon.setAttribute('aria-hidden', 'true');
+        anchor.appendChild(icon);
+        const label = document.createElement('span');
+        label.className = 'd-lg-none';
+        label.textContent = 'תיבת פניות';
+        anchor.appendChild(label);
+        item.appendChild(anchor);
+        navList.insertBefore(item, chatItem);
+      } else if (anchor.tagName !== 'A') {
+        anchor = anchor.querySelector('a');
+      }
       if (!anchor) return;
+
+      anchor.id = 'contact-inbox-nav';
       anchor.href = route;
       anchor.title = 'תיבת פניות';
       anchor.setAttribute('aria-label', 'תיבת פניות');
       anchor.classList.add('ci-nav-anchor');
+
       let icon = anchor.querySelector('i.fa-envelope, i.fa-envelope-o, .fa-envelope, .fa-envelope-o');
       if (!icon) {
         icon = document.createElement('i');
@@ -73,6 +105,7 @@
         icon.classList.remove('fa-envelope-o');
         icon.classList.add('fa', 'fa-envelope');
       }
+
       let badge = anchor.querySelector('.ci-nav-badge');
       if (!badge) {
         badge = document.createElement('span');
@@ -80,22 +113,9 @@
         badge.setAttribute('aria-hidden', 'true');
         anchor.appendChild(badge);
       }
-      try {
-        let count;
-        try {
-          const result = await request('/unread');
-          count = Number(result.count);
-        } catch (apiError) {
-          const fallback = await request('/submissions?view=active');
-          count = Number(fallback.newCount);
-        }
-        count = Number.isFinite(count) && count > 0 ? count : 0;
-        badge.textContent = count > 99 ? '99+' : String(count);
-        badge.hidden = count === 0;
-        anchor.dataset.contactInboxCount = String(count);
-      } catch (err) {
-        console.error('[contact-inbox] could not refresh active submission count:', err);
-      }
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.hidden = count === 0;
+      anchor.dataset.contactInboxCount = String(count);
     } catch (err) {
       console.error('[contact-inbox] could not update inbox navigation icon:', err);
     } finally {
