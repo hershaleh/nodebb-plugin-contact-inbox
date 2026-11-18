@@ -366,10 +366,11 @@ async function init({ router }) {
     navigationItems.push(inboxNavigation);
   }
   Object.assign(inboxNavigation, {
+    enabled: true,
     route: '/plugins/contact-inbox',
     id: 'contact-inbox-nav',
     title: 'תיבת פניות',
-    iconClass: 'fa-envelope-o',
+    iconClass: 'fa-envelope',
     textClass: 'd-lg-none',
     text: 'תיבת פניות',
     groups: allowedGroups,
