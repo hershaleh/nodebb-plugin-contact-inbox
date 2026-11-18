@@ -95,6 +95,7 @@ test('inbox uses in-forum modal dialogs and disables unavailable actions', () =>
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
   const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
   assert.ok(client.includes("className = 'modal fade ci-modal'"));
+  assert.ok(client.includes('else closeModal(wrap)'));
   assert.ok(client.includes("chat.disabled = !item.uid || !item.username"));
   assert.ok(client.includes("email.disabled = !settings || !settings.emailReplies || !settings.smtpConfigured"));
   assert.ok(template.includes('ci-history-button'));
