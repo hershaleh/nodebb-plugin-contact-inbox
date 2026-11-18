@@ -84,7 +84,7 @@ test('inbox separates active submissions from resolved history without read-stat
   assert.ok(client.includes("view === 'history'"));
   assert.ok(client.includes("request('/unread')"));
   assert.ok(server.includes("id: 'contact-inbox-nav'"));
-  assert.ok(server.includes('  addNavigation,'));
+  assert.ok(client.includes("id = 'contact-inbox-nav'"));
   assert.ok(server.includes("view === 'history' ? item.status === 'resolved' : item.status !== 'resolved'"));
   assert.ok(server.includes("item.status !== 'resolved').length"));
   assert.ok(server.includes("'/contact-inbox/history'"));
@@ -214,8 +214,8 @@ test('navigation badge falls back to active submission count and remains visible
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
   const scss = fs.readFileSync(path.join(root, 'public/lib/inbox.scss'), 'utf8');
   assert.ok(client.includes("request('/submissions?view=active')"));
-  assert.ok(client.includes("badge.style.display = count === 0 ? 'none' : 'inline-block'"));
-  assert.ok(scss.includes('.ci-nav-badge:not([hidden]){display:inline-block!important}'));
+  assert.ok(client.includes("icon.classList.toggle('unread-count', count > 0)"));
+  assert.ok(client.includes("icon.setAttribute('data-content', countText)"));
 });
 
 test('retention policy is edited in regular admin settings, not history tools', () => {
@@ -227,7 +227,7 @@ test('retention policy is edited in regular admin settings, not history tools', 
   assert.ok(!client.includes("getElementById('ci-retention-save')"));
 });
 
-test('deletion uses a direct confirmation and reports both success and failure', () => {
+test('deletion uses the forum confirmation modal and reports both success and failure', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
   assert.ok(client.includes("modal('אישור מחיקת פנייה', confirmBody"));
   assert.ok(client.includes("method: 'POST', body: '{}'"));
