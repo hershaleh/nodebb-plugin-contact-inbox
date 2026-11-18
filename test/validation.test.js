@@ -142,23 +142,18 @@ test('history clearing has an explicit POST endpoint', () => {
   assert.ok(server.includes("'/contact-inbox/history/clear'"));
 });
 
-test('forum navigation uses NodeBB native navigation hook and floating alerts module', () => {
+test('forum navigation icon clones the native NodeBB chat control and shows native unread count', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
-  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin.json'), 'utf8'));
-  assert.ok(manifest.hooks.some(hook => hook.hook === 'filter:navigation.available' && hook.method === 'addNavigation'));
-  assert.ok(server.includes("iconClass: 'fa-envelope-o'"));
-  assert.ok(server.includes("id: 'contact-inbox-nav'"));
-  assert.ok(client.includes("window.app.require('alerts')"));
-  assert.ok(client.includes("alerts.success(message, 5000)"));
-  assert.ok(client.includes('function refreshNavigationIcon()'));
-  assert.ok(client.includes("link.closest('li')"));
-  assert.ok(client.includes("#logged-in-menu > li.chats, #chat_dropdown"));
-  assert.ok(client.includes("link.id = 'contact-inbox-nav'"));
-  assert.ok(client.includes("fa fa-envelope-o"));
-  assert.ok(client.includes("chatItem.parentNode.insertBefore(navItem, chatItem)"));
+  assert.ok(!manifest.hooks.some(hook => hook.hook === 'filter:navigation.available'));
+  assert.ok(client.includes("window.app.require('components')"));
+  assert.ok(client.includes("components.get('chat/icon')"));
+  assert.ok(client.includes("id = 'contact-inbox-nav'"));
+  assert.ok(client.includes("className = 'fa fa-envelope-o'"));
+  assert.ok(client.includes("icon.classList.toggle('unread-count', count > 0)"));
+  assert.ok(client.includes("icon.setAttribute('data-content', countText)"));
+  assert.ok(client.includes("request('/submissions?view=active')"));
 });
-
 test('successful status and retention actions display native success notifications', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
   assert.ok(client.includes('הפנייה סומנה כטופלה והועברה להיסטוריה.'));
