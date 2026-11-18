@@ -423,7 +423,6 @@
         }}
       ]);
     });
-    document.getElementById('ci-retention-save').addEventListener('click', async () => {
     if (isSettingsPage) {
       renderSettingsPage().catch(err => { document.getElementById('ci-settings-content').textContent = err.message; });
     } else {
