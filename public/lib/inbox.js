@@ -42,17 +42,20 @@
   }
 
   async function refreshNavigationIcon() {
-    const item = document.getElementById('contact-inbox-nav');
-    if (!item) return;
-    const link = item.querySelector('a');
+    // NodeBB's vanilla header assigns this id to the <a>, not its wrapping <li>.
+    const link = document.getElementById('contact-inbox-nav');
     if (!link) return;
-    const chatAnchor = document.querySelector(
-      '#chat-list, #chat, #chat-icon, [component="chat"], a[href$="/chats"], a[href*="/user/"][href*="/chats"], a[href*="/chat"]'
-    );
-    const chatItem = chatAnchor && (chatAnchor.closest('li') || chatAnchor.closest('.nav-item') || chatAnchor);
-    if (chatItem && chatItem.parentNode && chatItem.parentNode === item.parentNode && chatItem.nextSibling !== item) {
-      chatItem.parentNode.insertBefore(item, chatItem.nextSibling);
+    const navItem = link.closest('li') || link;
+
+    // The chat control lives in #logged-in-menu, separate from #main-nav.
+    // Move the inbox item into that same list immediately before the chat item.
+    const chatItem = document.querySelector('#logged-in-menu > li.chats, #chat_dropdown')?.closest('li');
+    if (chatItem && chatItem.parentNode && navItem.parentNode !== chatItem.parentNode) {
+      chatItem.parentNode.insertBefore(navItem, chatItem);
+    } else if (chatItem && chatItem.parentNode && navItem.nextSibling !== chatItem) {
+      chatItem.parentNode.insertBefore(navItem, chatItem);
     }
+
     let badge = link.querySelector('.ci-nav-badge');
     if (!badge) {
       badge = document.createElement('span');
@@ -65,9 +68,9 @@
       const count = Number(result.count) || 0;
       badge.textContent = count > 99 ? '99+' : String(count);
       badge.hidden = count === 0;
-      item.hidden = false;
+      navItem.hidden = false;
     } catch (err) {
-      if (/403|forbidden|הרשאה|401/i.test(err.message)) item.hidden = true;
+      if (/403|forbidden|הרשאה|401/i.test(err.message)) navItem.hidden = true;
     }
   }
 
