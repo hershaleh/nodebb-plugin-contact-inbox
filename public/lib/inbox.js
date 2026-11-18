@@ -41,7 +41,10 @@
     return data;
   }
 
+  let navRefreshInProgress = false;
   async function refreshNavigationIcon() {
+    if (navRefreshInProgress) return;
+    navRefreshInProgress = true;
     try {
       let navNode = document.getElementById('contact-inbox-nav');
       if (!navNode) {
@@ -107,6 +110,8 @@
       }
     } catch (err) {
       console.error('[contact-inbox] could not create inbox navigation icon:', err);
+    } finally {
+      navRefreshInProgress = false;
     }
   }
 
@@ -464,6 +469,10 @@
   if ($) $(window).on('action:ajaxify.end', start);
   window.addEventListener('contact-inbox:refresh-unread', refreshNavigationIcon);
   if (!window.__ciNavRefreshTimer) window.__ciNavRefreshTimer = window.setInterval(refreshNavigationIcon, 30000);
-  const observer = new MutationObserver(() => { const item = document.getElementById('contact-inbox-nav'); if (item && !item.querySelector('.ci-nav-badge')) refreshNavigationIcon(); });
+  const observer = new MutationObserver(() => {
+    const item = document.getElementById('contact-inbox-nav');
+    const chat = document.querySelector('[component="chat/dropdown"], a[href*="/chats"], a[href*="/chat"]');
+    if (!item && chat) refreshNavigationIcon();
+  });
   if (document.documentElement) observer.observe(document.documentElement, { childList: true, subtree: true });
 }());
