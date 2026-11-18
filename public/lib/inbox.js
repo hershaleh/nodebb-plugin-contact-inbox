@@ -142,7 +142,7 @@
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'btn ' + (spec.className || 'btn-default'); b.textContent = spec.label;
       b.addEventListener('click', async () => {
-        if (spec.onClick) await spec.onClick(wrap, b);
+        if (spec.onClick) await spec.onClick(wrap, b); else closeModal(wrap);
       });
       footer.appendChild(b);
     });
