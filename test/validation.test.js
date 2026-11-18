@@ -117,7 +117,7 @@ test('inbox uses native NodeBB toast alerts and dedicated history/settings route
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
   const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
   const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
-  assert.ok(client.includes("window.app.alert({"));
+  assert.ok(client.includes("amdRequire(['alerts']"));
   assert.ok(client.includes("window.location.assign(page + '/settings')"));
   assert.ok(client.includes("window.location.assign(page + (view === 'active' ? '/history' : ''))"));
   assert.ok(server.includes("setupPageRoute(router, '/plugins/contact-inbox/history'"));
