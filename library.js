@@ -11,6 +11,7 @@ const DEFAULTS = Object.freeze({
   emailReplies: false,
   notifySubmitter: false,
   submitterNotificationDelayMinutes: 5,
+  notifyStaffInApp: false,
 });
 let db, user, groups, meta, routeHelpers, apiHelpers, emailer, retentionTimer, pendingNotificationTimer, notifications, processingNotifications = false;
 
@@ -40,6 +41,7 @@ async function config() {
     maxPerHour: Math.max(1, Math.min(30, Number(saved.maxPerHour) || 5)),
     notifySubmitter: saved.notifySubmitter === true,
     submitterNotificationDelayMinutes: Math.max(1, Math.min(10080, Number(saved.submitterNotificationDelayMinutes) || 5)),
+    notifyStaffInApp: saved.notifyStaffInApp === true,
   };
 }
 
@@ -120,6 +122,36 @@ async function notifyStaff(submission) {
   }
 }
 
+async function notifyStaffInApp(submission, cfg) {
+  if (!cfg.notifyStaffInApp) return;
+  try {
+    const staffUids = new Set();
+    for (const groupName of cfg.allowedGroups) {
+      if (!groups || typeof groups.getMembers !== 'function') continue;
+      const members = await groups.getMembers(groupName, 0, -1);
+      members.forEach(uid => {
+        const numericUid = Number(uid);
+        if (Number.isInteger(numericUid) && numericUid > 0) staffUids.add(numericUid);
+      });
+    }
+    if (!staffUids.size) return;
+    const nid = 'contact-inbox:new:' + submission.id;
+    let notification = await notifications.get(nid);
+    if (!notification) {
+      notification = await notifications.create({
+        nid,
+        type: 'contact-inbox-new',
+        bodyShort: 'התקבלה פנייה חדשה בתיבת הפניות.',
+        from: 0,
+        path: '/plugins/contact-inbox',
+      });
+    }
+    if (notification) await notifications.push(notification, [...staffUids]);
+  } catch (err) {
+    console.error('[contact-inbox] staff in-app notification failed:', err.message);
+  }
+}
+
 async function scheduleSubmitterNotification(submission, cfg) {
   if (!submission.uid || !cfg.notifySubmitter) return;
   const delayMinutes = Math.max(1, Math.min(10080, Number(cfg.submitterNotificationDelayMinutes) || 5));
@@ -182,6 +214,7 @@ async function addNotificationType(data) {
   data = data || {};
   data.types = Array.isArray(data.types) ? data.types : [];
   if (!data.types.includes('contact-inbox-received')) data.types.push('contact-inbox-received');
+  if (!data.types.includes('contact-inbox-new')) data.types.push('contact-inbox-new');
   return data;
 }
 
@@ -216,6 +249,7 @@ async function submit(req, res) {
     await db.setObject(key(item.id), item);
     await db.sortedSetAdd(PREFIX + 'submissions', item.createdAt, item.id);
     void notifyStaff(item);
+    void notifyStaffInApp(item, cfg);
     try {
       await scheduleSubmitterNotification(item, cfg);
     } catch (err) {
@@ -390,6 +424,7 @@ async function saveSettings(req, res) {
     emailReplies: body.emailReplies === true && mailConfigured(),
     notifySubmitter: body.notifySubmitter === true,
     submitterNotificationDelayMinutes,
+    notifyStaffInApp: body.notifyStaffInApp === true,
   });
   return send(res, 200, { success: true });
 }
