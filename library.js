@@ -158,7 +158,14 @@ async function processPendingNotifications() {
             path: '/plugins/contact-inbox',
           });
         }
-        if (notification) await notifications.push(notification, [Number(job.uid)]);
+        if (notification) {
+          const uid = Number(job.uid);
+          const [alreadyUnread, alreadyRead] = await Promise.all([
+            db.isSortedSetMember('uid:' + uid + ':notifications:unread', nid),
+            db.isSortedSetMember('uid:' + uid + ':notifications:read', nid),
+          ]);
+          if (!alreadyUnread && !alreadyRead) await notifications.push(notification, [uid]);
+        }
         await db.sortedSetRemove(PREFIX + 'pending-notifications', submissionId);
         await db.delete(jobKey);
       } catch (err) {
