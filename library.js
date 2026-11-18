@@ -359,18 +359,18 @@ async function init({ router }) {
   const navigationAdmin = require.main.require('./src/navigation/admin');
   const navigationItems = await navigationAdmin.get();
   let inboxNavigation = navigationItems.find(item => item.route === '/plugins/contact-inbox');
+  const isNewNavigationItem = !inboxNavigation;
   const allowedGroups = (await config()).allowedGroups.map(name =>
     name === 'administrators' ? 'administrators' : String(name).toLowerCase().replace(/\\s+/g, '-')
   );
-  if (!inboxNavigation) {
-    inboxNavigation = {};
+  if (isNewNavigationItem) {
+    inboxNavigation = { enabled: true };
     navigationItems.push(inboxNavigation);
   }
   Object.assign(inboxNavigation, {
     route: '/plugins/contact-inbox',
     id: 'contact-inbox-nav',
     title: 'תיבת פניות',
-    enabled: true,
     iconClass: 'fa-envelope',
     textClass: 'd-lg-none',
     text: 'תיבת פניות',
