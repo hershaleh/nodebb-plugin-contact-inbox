@@ -56,12 +56,15 @@
       chatItem.parentNode.insertBefore(navItem, chatItem);
     }
 
-    let badge = link.querySelector('.ci-nav-badge');
+    const anchor = link.matches('a') ? link : link.querySelector('a');
+    if (!anchor) return;
+    anchor.classList.add('ci-nav-anchor');
+    let badge = anchor.querySelector('.ci-nav-badge');
     if (!badge) {
       badge = document.createElement('span');
       badge.className = 'ci-nav-badge';
       badge.hidden = true;
-      link.appendChild(badge);
+      anchor.appendChild(badge);
     }
     try {
       const result = await request('/unread');
