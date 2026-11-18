@@ -71,3 +71,15 @@
 
 #contact-inbox-nav .ci-nav-badge,.ci-nav-anchor .ci-nav-badge{position:absolute;top:-5px;inset-inline-start:-7px;z-index:10;pointer-events:none}
 #contact-inbox-nav .ci-nav-badge:not([hidden]),.ci-nav-anchor .ci-nav-badge:not([hidden]){display:inline-block!important}
+
+/* Keep the inbox shortcut visually neutral at rest, including on its own page.
+   Restore a subtle background only for pointer hover and keyboard focus. */
+#contact-inbox-nav,
+#contact-inbox-nav.active,
+#contact-inbox-nav:active {
+  background-color: transparent !important;
+}
+#contact-inbox-nav:hover,
+#contact-inbox-nav:focus-visible {
+  background-color: var(--bs-secondary-bg, #e9ecef) !important;
+}
