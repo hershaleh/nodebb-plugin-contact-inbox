@@ -117,66 +117,42 @@
       anchor.setAttribute('aria-label', 'תיבת פניות');
       anchor.classList.add('ci-nav-anchor');
 
-      // Use a self-contained outline SVG so the icon never depends on a
-      // Font Awesome font being present or loaded by the active theme.
-      let icon = anchor.querySelector('svg.ci-nav-envelope');
-      if (!icon) {
-        anchor.querySelectorAll('i').forEach(oldIcon => oldIcon.remove());
-        icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        icon.classList.add('ci-nav-envelope');
-        icon.setAttribute('viewBox', '0 0 24 24');
-        icon.setAttribute('width', '20');
-        icon.setAttribute('height', '20');
-        icon.setAttribute('fill', 'none');
-        icon.setAttribute('stroke', 'currentColor');
-        icon.setAttribute('stroke-width', '1.8');
-        icon.setAttribute('stroke-linecap', 'round');
-        icon.setAttribute('stroke-linejoin', 'round');
-        icon.setAttribute('aria-hidden', 'true');
-        const outline = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        outline.setAttribute('x', '3');
-        outline.setAttribute('y', '5');
-        outline.setAttribute('width', '18');
-        outline.setAttribute('height', '14');
-        outline.setAttribute('rx', '2');
-        const flap = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        flap.setAttribute('d', 'm3 7 9 7 9-7');
-        icon.append(outline, flap);
-        anchor.insertBefore(icon, anchor.firstChild);
-      }
+      // Match NodeBB's native notification navigation structure exactly:
+      // icon + relative wrapper + native navigation/count badge + label.
+      // The envelope is outlined when empty and solid when there are unread items.
+      const oldSvg = anchor.querySelector('svg.ci-nav-envelope');
+      if (oldSvg) oldSvg.remove();
+      anchor.querySelectorAll('.ci-nav-count-compact, .ci-nav-count-expanded, .ci-nav-badge').forEach(node => node.remove());
 
-      // Use NodeBB's native collapsed/expanded navigation counter markup.
-      // This gives the badge the same color, shape and responsive placement
-      // as the built-in chat and notification counters.
-      let compactBadge = anchor.querySelector('.ci-nav-count-compact');
-      if (!compactBadge) {
-        compactBadge = document.createElement('span');
-        compactBadge.className = 'ci-nav-count-compact visible-closed position-absolute badge rounded-1 bg-primary';
-        compactBadge.setAttribute('aria-hidden', 'true');
-        anchor.appendChild(compactBadge);
-      }
-      let expandedBadge = anchor.querySelector('.ci-nav-count-expanded');
-      if (!expandedBadge) {
-        expandedBadge = document.createElement('span');
-        expandedBadge.className = 'ci-nav-count-expanded visible-open badge rounded-1 bg-primary';
-        expandedBadge.setAttribute('aria-hidden', 'true');
-        anchor.appendChild(expandedBadge);
-      }
-      const countText = count > 99 ? '99+' : String(count);
-      [compactBadge, expandedBadge].forEach(badge => {
-        badge.textContent = countText;
-        badge.classList.toggle('hidden', count === 0);
-      });
-      // Inline physical offsets deliberately override Bootstrap RTL utilities.
-      compactBadge.style.position = 'absolute';
-      compactBadge.style.left = 'calc(100% + 3px)';
-      compactBadge.style.right = 'auto';
-      compactBadge.style.top = '50%';
-      compactBadge.style.transform = 'translateY(-50%)';
-      compactBadge.style.insetInlineStart = 'auto';
-      compactBadge.style.insetInlineEnd = 'auto';
-      // Remove the earlier custom badge if this item was already rendered.
-      anchor.querySelectorAll('.ci-nav-badge').forEach(badge => badge.remove());
+      anchor.className = 'nav-link navigation-link d-flex gap-2 justify-content-between align-items-center ci-nav-anchor';
+      anchor.replaceChildren();
+
+      const content = document.createElement('span');
+      content.className = 'd-flex gap-2 align-items-center text-nowrap truncate-open';
+
+      const iconWrap = document.createElement('span');
+      iconWrap.className = 'position-relative';
+
+      const icon = document.createElement('i');
+      icon.setAttribute('aria-hidden', 'true');
+      icon.setAttribute('component', 'contact-inbox/icon');
+      icon.className = count > 0 ? 'fa fa-fw fa-envelope' : 'fa-regular fa-envelope';
+
+      const badge = document.createElement('span');
+      badge.setAttribute('component', 'navigation/count');
+      badge.className = 'visible-closed position-absolute top-0 start-100 translate-middle badge rounded-1 bg-primary';
+      badge.setAttribute('aria-hidden', 'true');
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.classList.toggle('hidden', count === 0);
+
+      iconWrap.append(icon, badge);
+
+      const label = document.createElement('span');
+      label.className = 'nav-text small visible-open fw-semibold truncate-text';
+      label.textContent = 'תיבת פניות';
+
+      content.append(iconWrap, label);
+      anchor.appendChild(content);
       anchor.dataset.contactInboxCount = String(count);
     } catch (err) {
       console.error('[contact-inbox] could not update inbox navigation icon:', err);
