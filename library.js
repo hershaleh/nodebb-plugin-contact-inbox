@@ -381,7 +381,7 @@ async function init({ router }) {
     route: '/plugins/contact-inbox',
     id: 'contact-inbox-nav',
     title: 'תיבת פניות',
-    iconClass: 'fa-envelope',
+    iconClass: 'fa-envelope-o',
     textClass: 'd-lg-none',
     text: 'תיבת פניות',
     groups: allowedGroups,
