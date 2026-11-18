@@ -8,7 +8,6 @@ const DEFAULTS = Object.freeze({
   allowedGroups: ['administrators'],
   retentionDays: 0,
   maxPerHour: 5,
-  emailNotifications: false,
   emailReplies: false,
 });
 let db, user, groups, meta, routeHelpers, apiHelpers, emailer, retentionTimer;
@@ -73,7 +72,7 @@ async function all() {
   const kept = [];
   for (const item of values) {
     if (!item || item.deletedAt) continue;
-    if (cutoff && item.createdAt < cutoff) {
+    if (cutoff && item.status === 'resolved' && (item.updatedAt || item.createdAt) < cutoff) {
       await db.delete(key(item.id));
       await db.sortedSetRemove(PREFIX + 'submissions', item.id);
     } else {
@@ -84,12 +83,11 @@ async function all() {
 }
 
 async function countUnread() {
-  return (await all()).filter(item => !item.readAt).length;
+  return (await all()).filter(item => item.status !== 'resolved').length;
 }
 
 async function notifyStaff(submission) {
   const cfg = await config();
-  if (!cfg.emailNotifications) return;
   try {
     const staffUids = new Set();
     for (const groupName of cfg.allowedGroups) {
@@ -101,13 +99,17 @@ async function notifyStaff(submission) {
     }
     for (const uid of staffUids) {
       const prefs = await db.getObject(PREFIX + 'staff:' + uid) || {};
-      if (!prefs.notify || !validEmail(prefs.email || '')) continue;
-      await emailer.sendToEmail('contact-inbox-notification', prefs.email, null, {
-        subject: submission.subject,
-        name: submission.name,
-        message: submission.message,
-        inboxUrl: (meta.config.url || '').replace(/\/$/, '') + '/plugins/contact-inbox',
-      });
+      if (!prefs.notify) continue;
+      const accountEmail = await user.getUserField(Number(uid), 'email');
+      const recipients = [...new Set([accountEmail, ...(Array.isArray(prefs.extraEmails) ? prefs.extraEmails : [])].map(value => clean(value, 254).toLowerCase()).filter(validEmail))];
+      for (const recipient of recipients) {
+        await emailer.sendToEmail('contact-inbox-notification', recipient, null, {
+          subject: submission.subject,
+          name: submission.name,
+          message: submission.message,
+          inboxUrl: (meta.config.url || '').replace(/\/$/, '') + '/plugins/contact-inbox',
+        });
+      }
     }
   } catch (err) {
     console.error('[contact-inbox] staff notification failed:', err.message);
@@ -155,22 +157,20 @@ async function submit(req, res) {
 async function list(req, res) {
   const items = await all();
   const q = clean(req.query.q, 120).toLocaleLowerCase();
+  const view = clean(req.query.view, 20) || 'active';
   const status = clean(req.query.status, 30);
   const submissions = items.filter(item => {
     const text = [item.name, item.email, item.username, item.subject, item.message].join(' ').toLocaleLowerCase();
-    return (!q || text.includes(q)) && (!status || status === 'all' || item.status === status);
+    const inView = view === 'history' ? item.status === 'resolved' : item.status !== 'resolved';
+    return inView && (!q || text.includes(q)) && (!status || status === 'all' || item.status === status);
   });
-  return send(res, 200, { submissions, unreadCount: items.filter(item => !item.readAt).length });
+  return send(res, 200, { submissions, newCount: items.filter(item => item.status !== 'resolved').length, historyCount: items.filter(item => item.status === 'resolved').length });
 }
 
 async function detail(req, res) {
   const item = await get(req.params.id);
   if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
-  if (!item.readAt) {
-    item.readAt = Date.now();
-    item.readBy = Number(req.uid);
-    await db.setObject(key(item.id), item);
-  }
+  // Opening a submission does not change its workflow category.
   return send(res, 200, { submission: item });
 }
 
@@ -185,13 +185,39 @@ async function update(req, res) {
   return send(res, 200, { success: true, submission: item });
 }
 
+async function clearHistory(req, res) {
+  const items = (await all()).filter(item => item.status === 'resolved');
+  for (const item of items) {
+    await db.delete(key(item.id));
+    await db.sortedSetRemove(PREFIX + 'submissions', item.id);
+  }
+  return send(res, 200, { success: true, deleted: items.length });
+}
+
+
 async function remove(req, res) {
-  const item = await get(req.params.id);
-  if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
-  // A manual delete is permanent: remove the submission and its reply history.
+  const submissionId = String(req.params.id || '');
+  const item = await get(submissionId);
+  if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה או שכבר נמחקה' });
+
+  // Remove both the record and its index entry, then verify both writes.
+  // Returning success before verifying caused the UI to report a deletion
+  // even if the record remained visible in the inbox.
   await db.delete(key(item.id));
   await db.sortedSetRemove(PREFIX + 'submissions', item.id);
-  return send(res, 200, { success: true });
+  const [remainingRecord, indexStillContains] = await Promise.all([
+    db.getObject(key(item.id)),
+    db.isSortedSetMember(PREFIX + 'submissions', item.id),
+  ]);
+  const recordStillExists = !!remainingRecord;
+  if (recordStillExists || indexStillContains) {
+    console.error('[contact-inbox] deletion verification failed for submission:', item.id, {
+      recordStillExists, indexStillContains,
+    });
+    throw new Error('המחיקה לא הושלמה במסד הנתונים. הפנייה לא סומנה כנמחקת.');
+  }
+  console.info('[contact-inbox] submission permanently deleted:', item.id);
+  return send(res, 200, { success: true, deleted: true, id: item.id });
 }
 
 async function reply(req, res) {
@@ -228,14 +254,18 @@ async function reply(req, res) {
 async function openChat(req, res) {
   const item = await get(req.params.id);
   if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
-  if (!item.uid || item.uid === Number(req.uid)) {
-    return send(res, 409, { error: 'הפנייה אינה משויכת לחשבון אחר שאפשר לפתוח איתו צ׳אט.' });
+  if (!item.uid || !item.username || item.uid === Number(req.uid)) {
+    return send(res, 409, { error: 'הפנייה אינה משויכת לחשבון משתמש אחר שאפשר לפתוח איתו צ׳אט.' });
   }
   try {
     const messaging = require.main.require('./src/messaging');
-    await messaging.canMessageUser(Number(req.uid), Number(item.uid));
+    if (typeof messaging.canMessageUser === 'function') {
+      const allowed = await messaging.canMessageUser(Number(req.uid), Number(item.uid));
+      if (allowed === false) return send(res, 403, { error: 'הגדרות הפורום אינן מאפשרות לשלוח למשתמש זה הודעה פרטית.' });
+    }
     let roomId = await messaging.hasPrivateChat(Number(req.uid), Number(item.uid));
     if (!roomId) roomId = await messaging.newRoom(Number(req.uid), { uids: [Number(item.uid)] });
+    if (!roomId) throw new Error('NodeBB לא החזיר מזהה חדר צ׳אט');
     const staffSlug = await user.getUserField(req.uid, 'userslug');
     const baseUrl = String(meta.config.url || '').replace(/\/$/, '');
     return send(res, 200, { url: baseUrl + '/user/' + encodeURIComponent(staffSlug) + '/chats/' + roomId });
@@ -249,16 +279,24 @@ async function unread(req, res) {
 }
 
 async function saveStaffPrefs(req, res) {
-  const email = clean(req.body?.email, 254).toLowerCase();
   const notify = req.body?.notify === true;
-  if (notify && !validEmail(email)) return send(res, 400, { error: 'כתובת דוא״ל לא תקינה' });
-  await db.setObject(PREFIX + 'staff:' + req.uid, { email, notify });
+  const extraEmails = Array.isArray(req.body?.extraEmails)
+    ? [...new Set(req.body.extraEmails.map(value => clean(value, 254).toLowerCase()).filter(Boolean))].slice(0, 20)
+    : [];
+  if (extraEmails.some(email => !validEmail(email))) return send(res, 400, { error: 'אחת מכתובות הדוא״ל הנוספות אינה תקינה' });
+  await db.setObject(PREFIX + 'staff:' + req.uid, { notify, extraEmails });
   return send(res, 200, { success: true });
 }
 
 async function getStaffPrefs(req, res) {
-  const prefs = await db.getObject(PREFIX + 'staff:' + req.uid) || { email: '', notify: false };
-  return send(res, 200, { preferences: prefs });
+  const prefs = await db.getObject(PREFIX + 'staff:' + req.uid) || { notify: false, extraEmails: [] };
+  return send(res, 200, { preferences: { notify: !!prefs.notify, extraEmails: Array.isArray(prefs.extraEmails) ? prefs.extraEmails : [] } });
+}
+
+async function getGroups(req, res) {
+  const available = await groups.getNonPrivilegeGroups('groups:createtime', 0, -1, { ephemeral: false });
+  const names = [...new Set(['administrators', 'Global Moderators', ...available.map(group => group && group.name).filter(Boolean)])];
+  return send(res, 200, { groups: names });
 }
 
 async function saveSettings(req, res) {
@@ -274,7 +312,6 @@ async function saveSettings(req, res) {
     allowedGroups,
     retentionDays,
     maxPerHour,
-    emailNotifications: body.emailNotifications === true,
     emailReplies: body.emailReplies === true && mailConfigured(),
   });
   return send(res, 200, { success: true });
@@ -285,8 +322,25 @@ async function getSettings(req, res) {
   return send(res, 200, { settings: await config(), smtpConfigured: mailConfigured() });
 }
 
+async function getCapabilities(req, res) {
+  const cfg = await config();
+  return send(res, 200, { emailReplies: !!cfg.emailReplies, smtpConfigured: mailConfigured(), isAdmin: await user.isAdministrator(req.uid) });
+}
+
 async function adminPage(req, res) {
   res.render('admin/plugins/contact-inbox', { title: 'תיבת פניות' });
+}
+
+async function forumPage(req, res) {
+  res.render('contact-inbox', { title: 'תיבת פניות', inboxView: 'active' });
+}
+
+async function historyPage(req, res) {
+  res.render('contact-inbox', { title: 'היסטוריית פניות', inboxView: 'history' });
+}
+
+async function settingsPage(req, res) {
+  res.render('contact-inbox', { title: 'הגדרות תיבת הפניות', inboxView: 'settings' });
 }
 
 async function init({ router }) {
@@ -296,13 +350,42 @@ async function init({ router }) {
   meta = require.main.require('./src/meta');
   emailer = require.main.require('./src/emailer');
   routeHelpers = require.main.require('./src/routes/helpers');
+
+  // filter:navigation.available only exposes choices in ACP; it does not
+  // activate an item in the live header. Persist the plugin link in the
+  // enabled navigation list so NodeBB renders it for staff.
+  const navigationAdmin = require.main.require('./src/navigation/admin');
+  const navigationItems = await navigationAdmin.get();
+  let inboxNavigation = navigationItems.find(item => item.route === '/plugins/contact-inbox');
+  const isNewNavigationItem = !inboxNavigation;
+  const allowedGroups = (await config()).allowedGroups.map(name =>
+    name === 'administrators' ? 'administrators' : String(name).toLowerCase().replace(/\\s+/g, '-')
+  );
+  if (isNewNavigationItem) {
+    inboxNavigation = { enabled: true };
+    navigationItems.push(inboxNavigation);
+  }
+  Object.assign(inboxNavigation, {
+    enabled: true,
+    route: '/plugins/contact-inbox',
+    id: 'contact-inbox-nav',
+    title: 'תיבת פניות',
+    iconClass: 'fa-envelope',
+    textClass: 'd-lg-none',
+    text: 'תיבת פניות',
+    groups: allowedGroups,
+  });
+  await navigationAdmin.save(navigationItems);
+
   if (retentionTimer) clearInterval(retentionTimer);
   const runRetention = () => all().catch(err => console.error('[contact-inbox] retention cleanup failed:', err.message));
   void runRetention();
   retentionTimer = setInterval(runRetention, 60 * 60 * 1000);
   if (typeof retentionTimer.unref === 'function') retentionTimer.unref();
   routeHelpers.setupAdminPageRoute(router, '/admin/plugins/contact-inbox', [staffOnly], adminPage);
-  routeHelpers.setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], adminPage);
+  routeHelpers.setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], forumPage);
+  routeHelpers.setupPageRoute(router, '/plugins/contact-inbox/history', [staffOnly], historyPage);
+  routeHelpers.setupPageRoute(router, '/plugins/contact-inbox/settings', [staffOnly], settingsPage);
 }
 
 async function addRoutes({ router, middleware, helpers }) {
@@ -317,13 +400,36 @@ async function addRoutes({ router, middleware, helpers }) {
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/submissions/:id', staffMw, detail);
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/submissions/:id', staffWriteMw, update);
   routeHelpers.setupApiRoute(router, 'delete', '/contact-inbox/submissions/:id', staffWriteMw, remove);
+  routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/delete', staffWriteMw, remove);
+  routeHelpers.setupApiRoute(router, 'delete', '/contact-inbox/history', staffWriteMw, clearHistory);
+  routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/history/clear', staffWriteMw, clearHistory);
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/replies', staffWriteMw, reply);
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/chat', staffWriteMw, openChat);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/unread', staffMw, unread);
+  routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/groups', adminMw, getGroups);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/preferences', staffMw, getStaffPrefs);
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/preferences', staffWriteMw, saveStaffPrefs);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/settings', adminMw, getSettings);
+  routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/capabilities', staffMw, getCapabilities);
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/settings', [staffOnly, middleware.applyCSRF], saveSettings);
+}
+
+async function addNavigation(items) {
+  if (!Array.isArray(items)) return items;
+  const route = '/plugins/contact-inbox';
+  if (!items.some(item => item && item.route === route)) {
+    items.push({
+      id: 'contact-inbox',
+      route,
+      title: 'תיבת פניות',
+      enabled: true,
+      iconClass: 'fa-envelope-o',
+      textClass: 'd-lg-none',
+      text: 'תיבת פניות',
+      groups: ['administrators'],
+    });
+  }
+  return items;
 }
 
 async function addAdminNavigation(header) {
@@ -337,5 +443,6 @@ module.exports = {
   init,
   addRoutes,
   addAdminNavigation,
+  addNavigation,
   _test: { clean, validEmail },
 };

@@ -56,3 +56,181 @@ test('API routes enforce CSRF on writes and use standard NodeBB response formatt
   assert.ok(server.includes('messaging.hasPrivateChat'));
   assert.ok(server.includes("'/contact-inbox/submissions/:id/chat'"));
 });
+
+test('front-end inbox uses LTR source values so NodeBB RTL processing outputs RTL', () => {
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin.json'), 'utf8'));
+  const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
+  const scss = fs.readFileSync(path.join(root, 'public/lib/inbox.scss'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'public/lib/inbox.css'), 'utf8');
+
+  assert.ok(server.includes("res.render('contact-inbox'"));
+  assert.ok(server.includes("setupPageRoute(router, '/plugins/contact-inbox', [staffOnly], forumPage)"));
+  assert.ok(manifest.scripts.includes('public/lib/inbox.js'));
+  assert.ok(template.includes('dir="rtl"'));
+  assert.match(scss, /\.contact-inbox-page\{direction:ltr;/);
+  assert.match(scss, /\.contact-inbox-page\{[^}]*text-align:left;/);
+  assert.match(scss, /\.ci-row\{[^}]*text-align:left;/);
+  assert.doesNotMatch(scss, /direction:rtl|text-align:right/);
+  assert.equal(css, scss);
+  assert.ok(scss.includes('grid-template-columns:minmax(0,360px) minmax(0,1fr)'));
+  assert.ok(scss.includes('@media(max-width:760px)'));
+});
+
+test('inbox separates active submissions from resolved history without read-state transitions', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  assert.ok(client.includes("routePath.endsWith('/history') ? 'history' : 'active'"));
+  assert.ok(client.includes("view === 'history'"));
+  assert.ok(client.includes("request('/unread')"));
+  assert.ok(server.includes("id: 'contact-inbox-nav'"));
+  assert.ok(client.includes("id = 'contact-inbox-nav'"));
+  assert.ok(server.includes("view === 'history' ? item.status === 'resolved' : item.status !== 'resolved'"));
+  assert.ok(server.includes("item.status !== 'resolved').length"));
+  assert.ok(server.includes("'/contact-inbox/history'"));
+  assert.ok(!server.includes('item.readAt = Date.now()'));
+});
+
+test('inbox uses in-forum modal dialogs and disables unavailable actions', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
+  assert.ok(client.includes("window.bootbox.dialog({"));
+  assert.ok(client.includes('else closeModal(wrap)'));
+  assert.ok(client.includes("chat.disabled = !item.uid || !item.username"));
+  assert.ok(client.includes("email.disabled = !settings || !settings.emailReplies || !settings.smtpConfigured"));
+  assert.ok(template.includes('ci-history-button'));
+  assert.ok(template.includes('ci-settings-button'));
+  assert.ok(template.includes('ci-history-clear'));
+});
+
+
+test('write requests use NodeBB config CSRF token and modal closing supports Bootstrap versions', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(client.includes('window.config && window.config.csrf_token'));
+  assert.ok(client.includes("fetch(rel + '/api/config'"));
+  assert.ok(client.includes("opts.headers['x-csrf-token'] = await getCsrfToken()"));
+  assert.ok(client.includes('function closeModal(wrap)'));
+  assert.ok(client.includes('window.bootstrap.Modal.getInstance(wrap)'));
+  assert.ok(client.includes("$(wrap).modal('hide')"));
+});
+
+test('inbox uses native NodeBB toast alerts and dedicated history/settings routes', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
+  assert.ok(client.includes("window.app.require('alerts')"));
+  assert.ok(client.includes("window.location.assign(page + '/settings')"));
+  assert.ok(client.includes("window.location.assign(page + (view === 'active' ? '/history' : ''))"));
+  assert.ok(server.includes("setupPageRoute(router, '/plugins/contact-inbox/history'"));
+  assert.ok(server.includes("setupPageRoute(router, '/plugins/contact-inbox/settings'"));
+  assert.ok(template.includes('id="ci-settings-page"'));
+  assert.ok(template.includes('id="ci-back-button"'));
+});
+
+
+test('manual deletion uses the explicit POST endpoint and confirms success', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  assert.ok(client.includes("request('/submissions/' + encodeURIComponent(id) + '/delete', { method: 'POST', body: '{}' })"));
+  assert.ok(server.includes("setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/delete'"));
+  assert.ok(client.includes('הפנייה נמחקה בהצלחה.'));
+});
+
+test('history clearing has an explicit POST endpoint', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  assert.ok(client.includes("'/history/clear'"));
+  assert.ok(server.includes("'/contact-inbox/history/clear'"));
+});
+
+test('forum navigation icon clones the native NodeBB chat control and shows native unread count', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin.json'), 'utf8'));
+  assert.ok(!manifest.hooks.some(hook => hook.hook === 'filter:navigation.available'));
+  assert.ok(client.includes("document.querySelector('[component=\"chat/dropdown\"]')"));
+  assert.ok(client.includes("listItem.appendChild(navNode)"));
+  assert.ok(client.includes("id = 'contact-inbox-nav'"));
+  assert.ok(client.includes("className = 'fa fa-envelope-o'"));
+  assert.ok(client.includes("icon.classList.toggle('unread-count', count > 0)"));
+  assert.ok(client.includes("icon.setAttribute('data-content', countText)"));
+  assert.ok(client.includes("request('/submissions?view=active')"));
+});
+test('successful status and retention actions display native success notifications', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(client.includes('הפנייה סומנה כטופלה והועברה להיסטוריה.'));
+  assert.ok(client.includes('מדיניות שמירת ההיסטוריה נשמרה.'));
+});
+
+
+test('NodeBB native alerts are loaded through app.require and shown with alerts API', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(client.includes("window.app.require('alerts')"));
+  assert.ok(client.includes("alerts.error(message, 10000)"));
+});
+
+test('plugin ensures its navigation item is enabled in the live NodeBB menu', () => {
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  assert.ok(server.includes("require.main.require('./src/navigation/admin')"));
+  assert.ok(server.includes("navigationAdmin.save(navigationItems)"));
+  assert.ok(server.includes("id: 'contact-inbox-nav'"));
+});
+
+test('manual deletion verifies that both the database record and sorted-set index are removed', () => {
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(server.includes('db.getObject(key(item.id))'));
+  assert.ok(server.includes('db.isSortedSetMember(PREFIX + \'submissions\', item.id)'));
+  assert.ok(server.includes('deleted: true, id: item.id'));
+  assert.ok(client.includes('result.deleted !== true'));
+  assert.ok(server.includes("'/contact-inbox/submissions/:id/delete'"));
+});
+
+
+test('history entries can be returned to the active inbox', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(client.includes('סמן כלא טופל'));
+  assert.ok(client.includes("JSON.stringify({ status: 'new' })"));
+});
+
+test('staff notifications use the account email plus optional additional addresses', () => {
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(server.includes("user.getUserField(Number(uid), 'email')"));
+  assert.ok(server.includes('prefs.extraEmails'));
+  assert.ok(server.includes("'/contact-inbox/groups'"));
+  assert.ok(client.includes("request('/groups')"));
+  assert.ok(client.includes('ci-groups-list'));
+  assert.ok(client.includes('הוספת כתובת דוא״ל נוספת'));
+  assert.ok(!client.includes('התראות דוא״ל לצוות'));
+  assert.ok(!client.includes('כתובת לקבלת התראות'));
+});
+
+test('NodeBB native alerts module is loaded with the AMD require API', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(client.includes("window.app.require('alerts')"));
+});
+
+
+test('navigation badge falls back to active submission count and remains visible', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const scss = fs.readFileSync(path.join(root, 'public/lib/inbox.scss'), 'utf8');
+  assert.ok(client.includes("request('/submissions?view=active')"));
+  assert.ok(client.includes("icon.classList.toggle('unread-count', count > 0)"));
+  assert.ok(client.includes("icon.setAttribute('data-content', countText)"));
+});
+
+test('retention policy is edited in regular admin settings, not history tools', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
+  assert.ok(client.includes('const retentionInput = el(\'input\', \'form-control\')'));
+  assert.ok(client.includes('retentionDays: Number(f.retentionInput.value) || 0'));
+  assert.ok(!template.includes('id="ci-retention-admin"'));
+  assert.ok(!client.includes("getElementById('ci-retention-save')"));
+});
+
+test('deletion uses the forum confirmation modal and reports both success and failure', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(client.includes("modal('אישור מחיקת פנייה', confirmBody"));
+  assert.ok(client.includes("method: 'POST', body: '{}'"));
+  assert.ok(client.includes("await notify(err.message || 'מחיקת הפנייה נכשלה.', 'danger')"));
+});

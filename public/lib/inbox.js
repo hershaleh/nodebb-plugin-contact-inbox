@@ -2,234 +2,516 @@
   'use strict';
   if (window.__contactInboxLoaded) return;
   window.__contactInboxLoaded = true;
+  const rel = (window.config && window.config.relative_path) || '';
+  const API = rel + '/api/v3/plugins/contact-inbox';
+  const page = rel + '/plugins/contact-inbox';
+  const $ = window.jQuery;
 
-  const relativePath = (window.config && window.config.relative_path) || '';
-  const API = relativePath + '/api/v3/plugins/contact-inbox';
-  const page = relativePath + '/plugins/contact-inbox';
+  let csrfToken = window.config && window.config.csrf_token;
+
+  async function getCsrfToken() {
+    if (csrfToken) return csrfToken;
+    const response = await fetch(rel + '/api/config', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    const config = await response.json().catch(() => ({}));
+    csrfToken = config.csrf_token || (config.response && config.response.csrf_token) || '';
+    if (!csrfToken) throw new Error('לא ניתן לקבל אסימון אבטחה מ-NodeBB. יש לרענן את הדף ולהתחבר מחדש.');
+    return csrfToken;
+  }
 
   async function request(path, options) {
     const opts = Object.assign({ credentials: 'same-origin' }, options || {});
-    opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
-    const token = document.querySelector('meta[name="csrf-token"]');
-    if (token && opts.method && opts.method !== 'GET') opts.headers['x-csrf-token'] = token.content;
+    const method = String(opts.method || 'GET').toUpperCase();
+    opts.headers = Object.assign({ 'Content-Type': 'application/json', 'Accept': 'application/json' }, opts.headers || {});
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      opts.headers['x-csrf-token'] = await getCsrfToken();
+    }
     const response = await fetch(API + path, opts);
-    const raw = await response.json().catch(() => ({}));
+    const bodyText = await response.text();
+    let raw = {};
+    try { raw = bodyText ? JSON.parse(bodyText) : {}; } catch (_) { raw = { error: bodyText.slice(0, 500) }; }
     const data = raw && raw.response && typeof raw.response === 'object' ? raw.response : raw;
-    if (!response.ok) throw new Error(data.error || raw.error || (raw.status && raw.status.message) || 'הפעולה נכשלה');
+    if (!response.ok) {
+      const message = (raw.status && raw.status.message) || (data.status && data.status.message) ||
+        data.error || raw.error || ('שגיאת שרת (' + response.status + ')');
+      throw new Error(message);
+    }
+    if (raw.status && raw.status.code && raw.status.code !== 'ok') {
+      throw new Error(raw.status.message || 'הפעולה נכשלה');
+    }
     return data;
   }
 
-  function addTopbarIcon() {
-    const nav = document.querySelector('#main-nav .navbar-nav, #header .navbar-nav, .navbar .navbar-nav');
-    if (!nav || document.getElementById('contact-inbox-nav')) return;
-    const item = document.createElement('li');
-    item.id = 'contact-inbox-nav';
-    item.className = 'contact-inbox-nav';
-    const link = document.createElement('a');
-    link.href = page;
-    link.title = 'תיבת פניות';
-    link.setAttribute('aria-label', 'תיבת פניות');
-    link.innerHTML = '<i class="fa fa-envelope" aria-hidden="true"></i><span class="ci-nav-badge" hidden></span>';
-    item.appendChild(link);
-    const nearby = nav.querySelector('#chat-list, #notifications, [component="chat/list"], [component="notifications"]');
-    const nearbyItem = nearby && nearby.closest('li');
-    if (nearbyItem && nearbyItem.parentNode === nav) nav.insertBefore(item, nearbyItem.nextSibling);
-    else nav.appendChild(item);
-    const badge = link.querySelector('.ci-nav-badge');
-    async function refresh() {
+  let navRefreshInProgress = false;
+  async function refreshNavigationIcon() {
+    if (navRefreshInProgress) return;
+    navRefreshInProgress = true;
+    try {
+      // This protected endpoint doubles as an authorization check. Do not
+      // expose the staff inbox link to users who cannot open the inbox.
+      let count;
       try {
-        const data = await request('/unread');
-        const count = Number(data.count) || 0;
-        badge.textContent = count > 99 ? '99+' : String(count);
-        badge.hidden = count < 1;
-        item.hidden = false;
-      } catch (err) {
-        if (err.message && !/403|Forbidden|הרשאה/.test(err.message)) console.warn('[contact-inbox]', err.message);
-        item.remove();
+        const result = await request('/unread');
+        count = Number(result.count);
+      } catch (apiError) {
+        return;
       }
+      count = Number.isFinite(count) && count > 0 ? count : 0;
+
+      const route = page;
+      let anchor = document.querySelector('#contact-inbox-nav[href], a#contact-inbox-nav, a[href="' + route + '"], a[href$="/plugins/contact-inbox"]');
+      if (!anchor) {
+        // Some themes do not render plugin navigation items in the header.
+        // Insert beside NodeBB's own chat control instead of depending on
+        // a pre-existing inbox link.
+        const chatToggle = document.querySelector('[component="chat/dropdown"]');
+        const chatItem = chatToggle && (chatToggle.closest('li') || chatToggle.parentElement);
+        const navList = chatItem && chatItem.parentElement;
+        if (!chatToggle || !chatItem || !navList) return;
+
+        const item = document.createElement(chatItem.tagName.toLowerCase() === 'li' ? 'li' : 'li');
+        item.className = chatItem.className || 'nav-item';
+        anchor = document.createElement('a');
+        anchor.id = 'contact-inbox-nav';
+        anchor.className = 'nav-link';
+        anchor.href = route;
+        const icon = document.createElement('i');
+        icon.className = 'fa fa-envelope';
+        icon.setAttribute('aria-hidden', 'true');
+        anchor.appendChild(icon);
+        const label = document.createElement('span');
+        label.className = 'd-lg-none';
+        label.textContent = 'תיבת פניות';
+        anchor.appendChild(label);
+        item.appendChild(anchor);
+        navList.insertBefore(item, chatItem);
+      } else if (anchor.tagName !== 'A') {
+        anchor = anchor.querySelector('a');
+      }
+      if (!anchor) return;
+
+      anchor.id = 'contact-inbox-nav';
+      anchor.href = route;
+      anchor.title = 'תיבת פניות';
+      anchor.setAttribute('aria-label', 'תיבת פניות');
+      anchor.classList.add('ci-nav-anchor');
+
+      let icon = anchor.querySelector('i.fa-envelope, i.fa-envelope-o, .fa-envelope, .fa-envelope-o');
+      if (!icon) {
+        icon = document.createElement('i');
+        icon.className = 'fa fa-envelope';
+        icon.setAttribute('aria-hidden', 'true');
+        anchor.insertBefore(icon, anchor.firstChild);
+      } else {
+        icon.classList.remove('fa-envelope-o');
+        icon.classList.add('fa', 'fa-envelope');
+      }
+
+      let badge = anchor.querySelector('.ci-nav-badge');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'ci-nav-badge badge';
+        badge.setAttribute('aria-hidden', 'true');
+        anchor.appendChild(badge);
+      }
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.hidden = count === 0;
+      anchor.dataset.contactInboxCount = String(count);
+    } catch (err) {
+      console.error('[contact-inbox] could not update inbox navigation icon:', err);
+    } finally {
+      navRefreshInProgress = false;
     }
-    refresh();
-    window.addEventListener('contact-inbox:refresh-unread', refresh);
-    window.setInterval(refresh, 60000);
+  }
+
+  async function notify(message, type) {
+    try {
+      if (window.app && typeof window.app.require === 'function') {
+        const alerts = await window.app.require('alerts');
+        if (type === 'success' && typeof alerts.success === 'function') { alerts.success(message, 5000); return; }
+        if ((type === 'danger' || type === 'error') && typeof alerts.error === 'function') { alerts.error(message, 10000); return; }
+        if (type === 'warning' && typeof alerts.warning === 'function') { alerts.warning(message, 5000); return; }
+        if (typeof alerts.info === 'function') { alerts.info(message, 5000); return; }
+      }
+    } catch (err) {
+      console.error('[contact-inbox] failed to load NodeBB alerts module:', err);
+    }
+    console.error('[contact-inbox] NodeBB alerts unavailable:', message);
+  }
+
+  function modal(title, bodyNode, buttons) {
+    // NodeBB 4.x bundles Bootbox. Use its Bootstrap-backed dialog instead
+    // of a native browser confirm or a hand-built modal with mismatched CSS.
+    if (window.bootbox && typeof window.bootbox.dialog === 'function' && $) {
+      let dialog;
+      const dialogButtons = {};
+      (buttons || []).forEach((spec, index) => {
+        dialogButtons['ci_button_' + index] = {
+          label: spec.label,
+          className: spec.className || 'btn-default',
+          callback: function () {
+            const wrap = dialog && dialog[0];
+            const button = wrap && wrap.querySelectorAll('.modal-footer button')[index];
+            if (spec.onClick) {
+              Promise.resolve(spec.onClick(wrap, button)).catch(err => notify(err.message || 'הפעולה נכשלה.', 'danger'));
+              return false;
+            }
+            return true;
+          },
+        };
+      });
+      dialog = window.bootbox.dialog({
+        title: title,
+        message: $(bodyNode),
+        buttons: dialogButtons,
+        onEscape: true,
+        backdrop: true,
+        centerVertical: true,
+        className: 'ci-modal',
+      });
+      return { element: dialog && dialog[0], close: () => dialog && dialog.modal('hide') };
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'modal fade ci-modal';
+    wrap.tabIndex = -1;
+    wrap.innerHTML = '<div class="modal-dialog"><div class="modal-content"><div class="modal-header"><button type="button" class="close" data-dismiss="modal" data-bs-dismiss="modal" aria-label="סגירה"><span aria-hidden="true">&times;</span></button><h4 class="modal-title"></h4></div><div class="modal-body"></div><div class="modal-footer"></div></div></div>';
+    wrap.querySelector('.modal-title').textContent = title;
+    wrap.querySelector('.modal-body').appendChild(bodyNode);
+    const footer = wrap.querySelector('.modal-footer');
+    (buttons || []).forEach(spec => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn ' + (spec.className || 'btn-default'); b.textContent = spec.label;
+      b.addEventListener('click', async () => {
+        if (spec.onClick) await spec.onClick(wrap, b); else closeModal(wrap);
+      });
+      footer.appendChild(b);
+    });
+    document.body.appendChild(wrap);
+    const close = () => closeModal(wrap);
+    if (window.bootstrap && window.bootstrap.Modal) {
+      wrap.addEventListener('hidden.bs.modal', () => wrap.remove(), { once: true });
+      window.bootstrap.Modal.getOrCreateInstance(wrap, { backdrop: 'static', keyboard: true }).show();
+    } else if ($ && $.fn && $.fn.modal) {
+      $(wrap).on('hidden.bs.modal', () => wrap.remove()).modal({ backdrop: 'static', keyboard: true, show: true });
+    } else {
+      wrap.classList.add('in'); wrap.style.display = 'block';
+      wrap.addEventListener('click', e => { if (e.target === wrap) close(); });
+      wrap.querySelector('[data-dismiss="modal"]').addEventListener('click', close);
+    }
+    return { element: wrap, close };
+  }
+
+  function closeModal(wrap) {
+    if (!wrap) return;
+    if (window.bootstrap && window.bootstrap.Modal) {
+      const instance = window.bootstrap.Modal.getInstance(wrap);
+      if (instance) { instance.hide(); return; }
+    }
+    if ($ && $.fn && $.fn.modal) { $(wrap).modal('hide'); return; }
+    wrap.remove();
   }
 
   function initInbox() {
     const root = document.querySelector('.contact-inbox-page');
-    if (!root) return;
+    if (!root || root.dataset.initialized) return;
+    root.dataset.initialized = '1';
     const list = document.getElementById('ci-list');
     const detail = document.getElementById('ci-detail');
     const search = document.getElementById('ci-search');
     const status = document.getElementById('ci-status');
-    const unread = document.getElementById('ci-unread');
-    let activeId = null;
-    let rows = [];
+    const count = document.getElementById('ci-count');
+    const historyButton = document.getElementById('ci-history-button');
+    const settingsButton = document.getElementById('ci-settings-button');
+    const routePath = (window.location.pathname || '').replace(/\/+$/, '');
+    const isSettingsPage = routePath.endsWith('/settings');
+    let view = routePath.endsWith('/history') ? 'history' : 'active', activeId = null, settings = null, isAdmin = false;
 
-    function el(tag, cls, value) {
+    const el = (tag, cls, value) => {
       const node = document.createElement(tag);
       if (cls) node.className = cls;
       if (value !== undefined) node.textContent = value;
       return node;
+    };
+    const date = value => new Date(value).toLocaleString('he-IL');
+    const field = (label, value, cls) => {
+      const box = el('div', 'ci-detail-field ' + (cls || ''));
+      box.append(el('div', 'ci-field-label', label), el('div', 'ci-field-value', value || '—'));
+      return box;
+    };
+    function updateHeader(data) {
+      count.textContent = view === 'active'
+        ? 'פניות חדשות: ' + (Number(data.newCount) || 0)
+        : 'בהיסטוריה: ' + (Number(data.historyCount) || 0);
+      historyButton.textContent = view === 'active' ? 'היסטוריית פניות' : 'חזרה לפניות חדשות';
+      historyButton.classList.toggle('active', view === 'history');
     }
-    function date(value) {
-      return new Date(value).toLocaleString('he-IL');
+    async function load() {
+      list.textContent = 'טוען פניות…';
+      try {
+        const params = new URLSearchParams({ q: search.value.trim(), status: status.value, view });
+        const data = await request('/submissions?' + params.toString());
+        updateHeader(data);
+        render(data.submissions || []);
+      } catch (err) { list.textContent = err.message; }
     }
-    function renderList() {
+    function render(items) {
       list.replaceChildren();
-      unread.textContent = 'לא נקראו: ' + rows.filter(item => !item.readAt).length;
-      if (!rows.length) {
-        list.append(el('p', 'text-muted', 'לא נמצאו פניות.'));
+      if (!items.length) {
+        list.append(el('div', 'ci-empty', view === 'history' ? 'אין פניות בהיסטוריה.' : 'אין פניות חדשות.'));
         return;
       }
-      rows.forEach(item => {
-        const button = el('button', 'ci-row' + (item.id === activeId ? ' active' : ''));
+      items.forEach(item => {
+        const button = el('button', 'ci-row' + (item.id === activeId ? ' active' : ''), '');
         button.type = 'button';
         const top = el('div', 'ci-row-top');
         top.append(el('strong', '', item.subject), el('small', '', date(item.createdAt)));
         button.append(top, el('div', 'ci-row-meta', item.name + ' · ' + item.email));
         button.append(el('p', 'ci-row-preview', item.message));
-        if (!item.readAt) button.append(el('span', 'label label-primary', 'חדש'));
+        if (item.status === 'in_progress') button.append(el('span', 'label label-info', 'בטיפול'));
         button.addEventListener('click', () => openItem(item.id));
         list.append(button);
       });
     }
-    async function load() {
-      list.textContent = 'טוען פניות…';
-      try {
-        const params = new URLSearchParams({ q: search.value.trim(), status: status.value });
-        const data = await request('/submissions?' + params);
-        rows = data.submissions || [];
-        renderList();
-      } catch (err) { list.textContent = err.message; }
-    }
     async function openItem(id) {
       activeId = id;
       try {
-        const data = await request('/submissions/' + encodeURIComponent(id));
-        const item = data.submission;
+        const result = await request('/submissions/' + encodeURIComponent(id));
+        const item = result.submission;
         detail.replaceChildren();
-        detail.append(el('h2', '', item.subject));
-        detail.append(el('p', 'ci-muted', date(item.createdAt)));
-        detail.append(el('p', '', 'שם: ' + item.name));
-        detail.append(el('p', '', 'דוא״ל: ' + item.email));
-        if (item.username) detail.append(el('p', '', 'משתמש: @' + item.username));
-        detail.append(el('article', 'ci-message', item.message));
-        if (item.uid) {
-          const chat = el('button', 'btn btn-default', 'פתיחת צ׳אט עם המשתמש');
-          chat.type = 'button';
-          chat.addEventListener('click', async () => {
-            chat.disabled = true;
-            try {
-              const result = await request('/submissions/' + encodeURIComponent(id) + '/chat', {
-                method: 'POST',
-                body: JSON.stringify({})
-              });
-              window.location.assign(result.url);
-            } catch (err) {
-              window.alert(err.message);
-              chat.disabled = false;
-            }
+        detail.append(el('h2', 'ci-subject', item.subject));
+        detail.append(field('פרטי הפונה', item.name + ' · ' + item.email, 'ci-person'));
+        detail.append(field('תאריך קבלה', date(item.createdAt)));
+        if (item.username) detail.append(field('חשבון בפורום', '@' + item.username));
+        detail.append(field('תוכן הפנייה', item.message, 'ci-message-card'));
+        if (item.replies && item.replies.length) {
+          const history = el('section', 'ci-replies');
+          history.append(el('h3', '', 'תשובות קודמות'));
+          item.replies.forEach(reply => {
+            const card = el('article', 'ci-reply');
+            card.append(el('small', '', date(reply.createdAt) + (reply.channel === 'email' ? ' · נשלח בדוא״ל' : ' · תשובה פנימית')));
+            card.append(el('p', '', reply.message)); history.append(card);
           });
-          detail.append(chat);
+          detail.append(history);
         }
-        const controls = el('div', 'ci-controls');
-        const select = el('select', 'form-control');
-        [['new','חדשה'],['in_progress','בטיפול'],['resolved','טופלה']].forEach(pair => {
-          const option = el('option', '', pair[1]); option.value = pair[0]; option.selected = item.status === pair[0]; select.append(option);
-        });
-        const update = el('button', 'btn btn-primary', 'עדכון סטטוס');
-        update.addEventListener('click', async () => {
-          try { await request('/submissions/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify({ status: select.value }) }); await load(); }
-          catch (err) { window.alert(err.message); }
-        });
-        controls.append(select, update);
-        detail.append(controls);
-        const history = el('div', 'ci-history');
-        history.append(el('h3', '', 'היסטוריית תשובות'));
-        (item.replies || []).forEach(reply => {
-          const block = el('div', 'ci-reply');
-          block.append(el('small', '', date(reply.createdAt) + (reply.channel === 'email' ? ' · דוא״ל' : ' · פנימי')), el('p', '', reply.message));
-          history.append(block);
-        });
-        const textarea = el('textarea', 'form-control');
-        textarea.rows = 4; textarea.placeholder = 'כתיבת תשובה פנימית…';
-        const emailLabel = el('label', 'ci-email-reply-option');
-        const emailCheck = el('input');
-        emailCheck.type = 'checkbox';
-        emailLabel.append(emailCheck, document.createTextNode(' שליחת התשובה גם לכתובת הדוא״ל של הפונה (אם האפשרות הופעלה בהגדרות)'));
-        const replyButton = el('button', 'btn btn-primary', 'שמירת תשובה בהיסטוריה');
-        replyButton.addEventListener('click', async () => {
+        const actions = el('div', 'ci-actions');
+        const chat = el('button', 'btn btn-default', 'התחלת צ׳אט עם המשתמש');
+        chat.type = 'button'; chat.disabled = !item.uid || !item.username;
+        chat.title = chat.disabled ? 'הפנייה לא משויכת לחשבון משתמש בפורום' : '';
+        chat.addEventListener('click', async () => {
+          chat.disabled = true;
           try {
-            await request('/submissions/' + encodeURIComponent(id) + '/replies', { method: 'POST', body: JSON.stringify({ message: textarea.value, sendEmail: emailCheck.checked }) });
-            await openItem(id);
-          } catch (err) { window.alert(err.message); }
+            const data = await request('/submissions/' + encodeURIComponent(id) + '/chat', { method: 'POST', body: '{}' });
+            if (!data.url) throw new Error('לא התקבל קישור לצ׳אט');
+            window.location.assign(data.url);
+          } catch (err) { notify(err.message, 'danger'); chat.disabled = false; }
         });
-        history.append(textarea, emailLabel, replyButton);
-        detail.append(history);
+        actions.append(chat);
+        const email = el('button', 'btn btn-primary', 'שליחת תשובה מדוא״ל הפורום');
+        email.type = 'button'; email.disabled = !settings || !settings.emailReplies || !settings.smtpConfigured;
+        email.title = email.disabled ? 'יש להפעיל תשובות בדוא״ל ולהגדיר SMTP וכתובת שולח' : '';
+        email.addEventListener('click', () => {
+          const form = document.createElement('div');
+          form.append(el('p', 'text-muted', 'התשובה תישלח אל: ' + item.email));
+          const textarea = el('textarea', 'form-control'); textarea.rows = 6; textarea.placeholder = 'כתיבת תשובה…'; form.append(textarea);
+          modal('שליחת תשובה בדוא״ל', form, [
+            { label: 'ביטול', className: 'btn-default' },
+            { label: 'שליחה', className: 'btn-primary', onClick: async (wrap, button) => {
+              if (!textarea.value.trim()) { notify('יש לכתוב את תוכן התשובה.', 'warning'); return; }
+              button.disabled = true;
+              try {
+                await request('/submissions/' + encodeURIComponent(id) + '/replies', { method: 'POST', body: JSON.stringify({ message: textarea.value, sendEmail: true }) });
+                closeModal(wrap); await openItem(id); notify('התשובה נשלחה ונשמרה בהיסטוריה.', 'success');
+              } catch (err) { notify(err.message, 'danger'); button.disabled = false; }
+            }}
+          ]);
+        });
+        actions.append(email);
+        if (view === 'history') {
+          const reopen = el('button', 'btn btn-warning', 'סמן כלא טופל');
+          reopen.type = 'button';
+          reopen.addEventListener('click', async () => {
+            reopen.disabled = true;
+            try {
+              await request('/submissions/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify({ status: 'new' }) });
+              activeId = null;
+              detail.replaceChildren(el('p', 'ci-empty', 'הפנייה הוחזרה לפניות הפעילות.'));
+              await load();
+              await notify('הפנייה סומנה כלא טופלה והוחזרה לפניות הפעילות.', 'success');
+              window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
+            } catch (err) { await notify(err.message, 'danger'); reopen.disabled = false; }
+          });
+          actions.append(reopen);
+        }
+        if (view === 'active') {
+          const done = el('button', 'btn btn-success', 'סמן כטופל');
+          done.type = 'button';
+          done.addEventListener('click', async () => {
+            done.disabled = true;
+            try {
+              await request('/submissions/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify({ status: 'resolved' }) });
+              activeId = null; detail.replaceChildren(el('p', 'ci-empty', 'הפנייה הועברה להיסטוריה.')); await load(); await notify('הפנייה סומנה כטופלה והועברה להיסטוריה.', 'success');
+              window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
+            } catch (err) { notify(err.message, 'danger'); done.disabled = false; }
+          });
+          actions.append(done);
+        }
         const remove = el('button', 'btn btn-danger', 'מחיקת הפנייה');
-        remove.addEventListener('click', async () => {
-          if (!window.confirm('למחוק את הפנייה ואת היסטוריית התשובות שלה?')) return;
-          try { await request('/submissions/' + encodeURIComponent(id), { method: 'DELETE' }); activeId = null; detail.textContent = 'הפנייה נמחקה.'; await load(); }
-          catch (err) { window.alert(err.message); }
+        remove.type = 'button';
+        remove.addEventListener('click', () => {
+          const confirmBody = el('p', '', 'למחוק לצמיתות את הפנייה ואת כל התשובות שלה? לא ניתן לשחזר את המידע לאחר המחיקה.');
+          modal('אישור מחיקת פנייה', confirmBody, [
+            { label: 'ביטול', className: 'btn-default' },
+            { label: 'מחיקה לצמיתות', className: 'btn-danger', onClick: async (wrap, button) => {
+              button.disabled = true;
+              try {
+                const result = await request('/submissions/' + encodeURIComponent(id) + '/delete', { method: 'POST', body: '{}' });
+                if (!result || result.deleted !== true) throw new Error('השרת לא אישר שהפנייה נמחקה בפועל.');
+                closeModal(wrap);
+                activeId = null;
+                detail.replaceChildren(el('p', 'ci-empty', 'הפנייה נמחקה.'));
+                await load();
+                await notify('הפנייה נמחקה בהצלחה.', 'success');
+                window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
+              } catch (err) {
+                await notify(err.message || 'מחיקת הפנייה נכשלה.', 'danger');
+                button.disabled = false;
+              }
+            }}
+          ]);
         });
-        detail.append(remove);
+        actions.append(remove); detail.append(actions);
         await load();
-        window.dispatchEvent(new Event('contact-inbox:refresh-unread'));
       } catch (err) { detail.textContent = err.message; }
     }
 
+    historyButton.addEventListener('click', () => {
+      window.location.assign(page + (view === 'active' ? '/history' : ''));
+    });
+    document.getElementById('ci-back-button').addEventListener('click', () => {
+      window.location.assign(page);
+    });
     document.getElementById('ci-refresh').addEventListener('click', load);
-    search.addEventListener('keydown', event => { if (event.key === 'Enter') load(); });
+    search.addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
     status.addEventListener('change', load);
 
-    const prefsMessage = document.getElementById('ci-prefs-message');
-    request('/preferences').then(data => {
-      document.getElementById('ci-notify').checked = !!data.preferences.notify;
-      document.getElementById('ci-staff-email').value = data.preferences.email || '';
-    }).catch(err => { prefsMessage.textContent = err.message; });
-    document.getElementById('ci-save-prefs').addEventListener('click', async () => {
-      try {
-        await request('/preferences', { method: 'PUT', body: JSON.stringify({
-          notify: document.getElementById('ci-notify').checked,
-          email: document.getElementById('ci-staff-email').value
-        }) });
-        prefsMessage.textContent = 'ההעדפות נשמרו.';
-      } catch (err) { prefsMessage.textContent = err.message; }
+    async function loadSettings() {
+      const caps = await request('/capabilities');
+      settings = { emailReplies: !!caps.emailReplies, smtpConfigured: !!caps.smtpConfigured };
+      isAdmin = !!caps.isAdmin;
+      if (isAdmin) {
+        const data = await request('/settings');
+        settings = Object.assign(data.settings, { smtpConfigured: !!data.smtpConfigured });
+      }
+    }
+    settingsButton.addEventListener('click', () => {
+      window.location.assign(page + '/settings');
     });
 
-    const adminSettings = document.getElementById('ci-admin-settings');
-    request('/settings').then(data => {
-      const cfg = data.settings;
-      adminSettings.hidden = false;
-      document.getElementById('ci-groups').value = (cfg.allowedGroups || ['administrators']).join(', ');
-      document.getElementById('ci-retention').value = cfg.retentionDays || 0;
-      document.getElementById('ci-rate').value = cfg.maxPerHour || 5;
-      document.getElementById('ci-email-notifications').checked = !!cfg.emailNotifications;
-      document.getElementById('ci-email-replies').checked = !!cfg.emailReplies;
-      document.getElementById('ci-smtp-note').textContent = data.smtpConfigured
-        ? 'SMTP וכתובת שולח פעילים לפי הגדרות NodeBB.'
-        : 'SMTP או כתובת השולח אינם מוגדרים. שליחת תשובות בדוא״ל תישאר מושבתת עד להגדרת שניהם.';
-    }).catch(() => {});
-    document.getElementById('ci-save-settings').addEventListener('click', async () => {
-      const message = document.getElementById('ci-settings-message');
-      try {
-        await request('/settings', { method: 'PUT', body: JSON.stringify({
-          allowedGroups: document.getElementById('ci-groups').value.split(',').map(v => v.trim()).filter(Boolean),
-          retentionDays: Number(document.getElementById('ci-retention').value),
-          maxPerHour: Number(document.getElementById('ci-rate').value),
-          emailNotifications: document.getElementById('ci-email-notifications').checked,
-          emailReplies: document.getElementById('ci-email-replies').checked
-        }) });
-        message.textContent = 'ההגדרות נשמרו.';
-      } catch (err) { message.textContent = err.message; }
+    async function renderSettingsPage() {
+      const inboxPage = document.getElementById('ci-inbox-page');
+      const settingsPage = document.getElementById('ci-settings-page');
+      if (!settingsPage) return;
+      if (inboxPage) inboxPage.hidden = true;
+      settingsPage.hidden = false;
+      root.querySelector('h1').textContent = 'הגדרות תיבת הפניות';
+      historyButton.hidden = true;
+      settingsButton.hidden = true;
+      document.getElementById('ci-back-button').hidden = false;
+      const content = document.getElementById('ci-settings-content');
+      content.replaceChildren(el('p', '', 'טוען הגדרות…'));
+      await loadSettings();
+      const form = el('div', 'ci-settings-form');
+      if (isAdmin) {
+        const groupsLabel = el('label', '', 'קבוצות מורשות');
+        const groupsWrap = el('div', 'ci-groups-list');
+        const groupData = await request('/groups');
+        const selected = new Set(settings.allowedGroups || ['administrators']);
+        (groupData.groups || []).forEach(name => {
+          const label = el('label', 'checkbox ci-group-option', name);
+          const input = el('input');
+          input.type = 'checkbox';
+          input.value = name;
+          input.checked = selected.has(name);
+          label.prepend(input);
+          groupsWrap.append(label);
+        });
+        const rateLabel = el('label', '', 'מספר פניות מרבי מכתובת IP בשעה');
+        const rateInput = el('input', 'form-control'); rateInput.type = 'number'; rateInput.min = '1'; rateInput.max = '30'; rateInput.value = settings.maxPerHour || 5;
+        const repliesLabel = el('label', 'checkbox', 'אפשר שליחת תשובות בדוא״ל'); const repliesInput = el('input'); repliesInput.type = 'checkbox'; repliesInput.checked = !!settings.emailReplies; repliesLabel.prepend(repliesInput);
+        const retentionLabel = el('label', '', 'מחיקה אוטומטית של פניות מההיסטוריה לאחר (ימים; 0 = ללא מחיקה אוטומטית)');
+        const retentionInput = el('input', 'form-control'); retentionInput.type = 'number'; retentionInput.min = '0'; retentionInput.max = '3650'; retentionInput.value = settings.retentionDays || 0;
+        form.append(el('h3', '', 'הגדרות מנהל'), groupsLabel, groupsWrap, rateLabel, rateInput, repliesLabel, retentionLabel, retentionInput,
+          el('p', 'text-muted', settings.smtpConfigured ? 'SMTP וכתובת השולח מוגדרים.' : 'SMTP או כתובת השולח אינם מוגדרים; שליחת תשובות לא תהיה זמינה.'));
+        form.dataset.adminSettings = '1';
+        form._adminFields = { groupsWrap, rateInput, repliesInput, retentionInput };
+      }
+      const prefs = el('section', 'ci-personal-prefs');
+      prefs.append(el('h3', '', 'העדפות התראות אישיות'));
+      const personalNotify = el('input', 'form-check-input'); personalNotify.type = 'checkbox';
+      const personalLabel = el('label', 'form-check form-switch ci-notify-switch', 'קבלת התראות דוא״ל לכתובת שבחשבון שלי');
+      personalLabel.prepend(personalNotify);
+      const extraEmails = el('div', 'ci-extra-emails');
+      const addEmail = el('button', 'btn btn-default', '+ הוספת כתובת דוא״ל נוספת'); addEmail.type = 'button';
+      function addEmailField(value) {
+        const row = el('div', 'ci-extra-email-row');
+        const input = el('input', 'form-control'); input.type = 'email'; input.placeholder = 'כתובת דוא״ל נוספת'; input.value = value || '';
+        const remove = el('button', 'btn btn-default', 'הסרה'); remove.type = 'button';
+        remove.addEventListener('click', () => row.remove());
+        row.append(input, remove); extraEmails.append(row);
+      }
+      addEmail.addEventListener('click', () => addEmailField(''));
+      prefs.append(personalLabel, extraEmails, addEmail); form.append(prefs);
+      const p = await request('/preferences');
+      personalNotify.checked = !!p.preferences.notify;
+      (p.preferences.extraEmails || []).forEach(addEmailField);
+      const save = el('button', 'btn btn-primary', 'שמירת הגדרות'); save.type = 'button';
+      save.addEventListener('click', async () => {
+        save.disabled = true;
+        try {
+          await request('/preferences', { method: 'PUT', body: JSON.stringify({ notify: personalNotify.checked, extraEmails: Array.from(extraEmails.querySelectorAll('input')).map(input => input.value.trim()).filter(Boolean) }) });
+          if (isAdmin && form._adminFields) {
+            const f = form._adminFields;
+            await request('/settings', { method: 'PUT', body: JSON.stringify({
+              allowedGroups: Array.from(f.groupsWrap.querySelectorAll('input:checked')).map(input => input.value),
+              maxPerHour: Number(f.rateInput.value), retentionDays: Number(f.retentionInput.value) || 0,
+              emailReplies: f.repliesInput.checked
+            }) });
+          }
+          await notify('ההגדרות נשמרו.', 'success');
+        } catch (err) { await notify(err.message, 'danger'); }
+        finally { save.disabled = false; }
+      });
+      form.append(save);
+      content.replaceChildren(form);
+    }
+    document.getElementById('ci-history-clear').addEventListener('click', () => {
+      modal('מחיקת היסטוריית הפניות', el('p', '', 'למחוק לצמיתות את כל הפניות שסומנו כטופלו ואת היסטוריית התשובות שלהן?'), [
+        { label: 'ביטול', className: 'btn-default' },
+        { label: 'מחיקת כל ההיסטוריה', className: 'btn-danger', onClick: async (wrap, button) => {
+          button.disabled = true;
+          try { const result = await request('/history/clear', { method: 'POST', body: '{}' }); closeModal(wrap); notify('נמחקו ' + result.deleted + ' פניות מההיסטוריה.', 'success'); await load(); window.dispatchEvent(new Event('contact-inbox:refresh-unread')); }
+          catch (err) { notify(err.message, 'danger'); button.disabled = false; }
+        }}
+      ]);
     });
-    load();
+    if (isSettingsPage) {
+      renderSettingsPage().catch(err => { document.getElementById('ci-settings-content').textContent = err.message; });
+    } else {
+      document.getElementById('ci-history-tools').hidden = view !== 'history';
+      document.getElementById('ci-history-button').textContent = view === 'history' ? 'חזרה לפניות פעילות' : 'היסטוריית פניות';
+      document.getElementById('ci-back-button').hidden = true;
+      load();
+    }
   }
 
-  function start() {
-    addTopbarIcon();
-    initInbox();
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
-  else start();
-  if (window.jQuery) window.jQuery(window).on('action:ajaxify.end', start);
+  function start() { refreshNavigationIcon(); initInbox(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+  if ($) $(window).on('action:ajaxify.end', start);
+  window.addEventListener('contact-inbox:refresh-unread', refreshNavigationIcon);
+  if (!window.__ciNavRefreshTimer) window.__ciNavRefreshTimer = window.setInterval(refreshNavigationIcon, 30000);
+  const observer = new MutationObserver(() => {
+    const item = document.getElementById('contact-inbox-nav');
+    const chat = document.querySelector('[component="chat/dropdown"], a[href*="/chats"], a[href*="/chat"]');
+    if (!item && chat) refreshNavigationIcon();
+  });
+  if (document.documentElement) observer.observe(document.documentElement, { childList: true, subtree: true });
 }());
