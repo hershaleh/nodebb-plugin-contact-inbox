@@ -206,12 +206,27 @@ async function addNavigation(menu) {
 }
 
 async function remove(req, res) {
-  const item = await get(req.params.id);
-  if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
-  // A manual delete is permanent: remove the submission and its reply history.
+  const submissionId = String(req.params.id || '');
+  const item = await get(submissionId);
+  if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה או שכבר נמחקה' });
+
+  // Remove both the record and its index entry, then verify both writes.
+  // Returning success before verifying caused the UI to report a deletion
+  // even if the record remained visible in the inbox.
   await db.delete(key(item.id));
   await db.sortedSetRemove(PREFIX + 'submissions', item.id);
-  return send(res, 200, { success: true });
+  const [recordStillExists, indexStillContains] = await Promise.all([
+    db.exists(key(item.id)),
+    db.isSortedSetMember(PREFIX + 'submissions', item.id),
+  ]);
+  if (recordStillExists || indexStillContains) {
+    console.error('[contact-inbox] deletion verification failed for submission:', item.id, {
+      recordStillExists, indexStillContains,
+    });
+    throw new Error('המחיקה לא הושלמה במסד הנתונים. הפנייה לא סומנה כנמחקת.');
+  }
+  console.info('[contact-inbox] submission permanently deleted:', item.id);
+  return send(res, 200, { success: true, deleted: true, id: item.id });
 }
 
 async function reply(req, res) {
@@ -337,6 +352,32 @@ async function init({ router }) {
   meta = require.main.require('./src/meta');
   emailer = require.main.require('./src/emailer');
   routeHelpers = require.main.require('./src/routes/helpers');
+
+  // filter:navigation.available only exposes choices in ACP; it does not
+  // activate an item in the live header. Persist the plugin link in the
+  // enabled navigation list so NodeBB renders it for staff.
+  const navigationAdmin = require.main.require('./src/navigation/admin');
+  const navigationItems = await navigationAdmin.get();
+  let inboxNavigation = navigationItems.find(item => item.route === '/plugins/contact-inbox');
+  const allowedGroups = (await config()).allowedGroups.map(name =>
+    name === 'administrators' ? 'administrators' : String(name).toLowerCase().replace(/\\s+/g, '-')
+  );
+  if (!inboxNavigation) {
+    inboxNavigation = {};
+    navigationItems.push(inboxNavigation);
+  }
+  Object.assign(inboxNavigation, {
+    route: '/plugins/contact-inbox',
+    id: 'contact-inbox-nav',
+    title: 'תיבת פניות',
+    enabled: true,
+    iconClass: 'fa-envelope',
+    textClass: 'd-lg-none',
+    text: 'תיבת פניות',
+    groups: allowedGroups,
+  });
+  await navigationAdmin.save(navigationItems);
+
   if (retentionTimer) clearInterval(retentionTimer);
   const runRetention = () => all().catch(err => console.error('[contact-inbox] retention cleanup failed:', err.message));
   void runRetention();
