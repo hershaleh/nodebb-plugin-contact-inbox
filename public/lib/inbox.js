@@ -89,7 +89,7 @@
         item = document.createElement('li');
         item.className = chatItem.classList.contains('nav-item') ? chatItem.className : 'nav-item';
         anchor = document.createElement('a');
-        anchor.className = 'nav-link navigation-link d-flex gap-2 align-items-center';
+        anchor.className = 'nav-link navigation-link';
         anchor.id = 'contact-inbox-nav';
         anchor.href = route;
         const icon = document.createElement('i');
@@ -171,7 +171,7 @@
       compactBadge.style.position = 'absolute';
       compactBadge.style.left = 'calc(100% + 3px)';
       compactBadge.style.right = 'auto';
-      compactBadge.style.top = '0';
+      compactBadge.style.top = '50%';
       compactBadge.style.transform = 'translateY(-50%)';
       compactBadge.style.insetInlineStart = 'auto';
       compactBadge.style.insetInlineEnd = 'auto';
