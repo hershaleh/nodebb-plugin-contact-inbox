@@ -90,8 +90,12 @@ async function all() {
   return kept;
 }
 
-async function countUnread() {
-  return (await all()).filter(item => item.status !== 'resolved').length;
+async function countUnread(uid) {
+  const items = (await all()).filter(item => item.status !== 'resolved');
+  if (!Number(uid) || Number(uid) < 1 || !items.length) return items.length;
+  const ids = items.map(item => item.id);
+  const readByUser = await db.isSortedSetMembers(PREFIX + 'staff:' + Number(uid) + ':read', ids);
+  return readByUser.filter(isRead => !isRead).length;
 }
 
 async function notifyStaff(submission) {
@@ -274,14 +278,25 @@ async function list(req, res) {
     const inView = view === 'history' ? item.status === 'resolved' : item.status !== 'resolved';
     return inView && (!q || text.includes(q)) && (!status || status === 'all' || item.status === status);
   });
-  return send(res, 200, { submissions, newCount: items.filter(item => item.status !== 'resolved').length, historyCount: items.filter(item => item.status === 'resolved').length });
+  const readIds = Number(req.uid) > 0 && submissions.length
+    ? await db.isSortedSetMembers(PREFIX + 'staff:' + Number(req.uid) + ':read', submissions.map(item => item.id))
+    : submissions.map(() => false);
+  const submissionsWithReadState = submissions.map((item, index) => ({ ...item, readByMe: !!readIds[index] }));
+  return send(res, 200, {
+    submissions: submissionsWithReadState,
+    newCount: await countUnread(req.uid),
+    historyCount: items.filter(item => item.status === 'resolved').length,
+  });
 }
 
 async function detail(req, res) {
   const item = await get(req.params.id);
   if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
-  // Opening a submission does not change its workflow category.
-  return send(res, 200, { submission: item });
+  // Read state is private to the current staff member and does not change workflow status.
+  const readByMe = Number(req.uid) > 0
+    ? await db.isSortedSetMember(PREFIX + 'staff:' + Number(req.uid) + ':read', item.id)
+    : false;
+  return send(res, 200, { submission: { ...item, readByMe: !!readByMe } });
 }
 
 async function update(req, res) {
@@ -384,8 +399,27 @@ async function openChat(req, res) {
   }
 }
 
+async function markSubmissionRead(req, res) {
+  const item = await get(req.params.id);
+  if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
+  const uid = Number(req.uid);
+  if (!Number.isInteger(uid) || uid < 1) return send(res, 403, { error: 'אין הרשאה לסמן פנייה כנקראה' });
+
+  await db.sortedSetAdd(PREFIX + 'staff:' + uid + ':read', Date.now(), item.id);
+  try {
+    const nid = 'contact-inbox:new:' + item.id;
+    await notifications.markRead(nid, uid);
+    if (user.notifications && typeof user.notifications.pushCount === 'function') {
+      user.notifications.pushCount(uid);
+    }
+  } catch (err) {
+    console.error('[contact-inbox] could not mark matching NodeBB notification as read:', err.message);
+  }
+  return send(res, 200, { success: true, readByMe: true });
+}
+
 async function unread(req, res) {
-  return send(res, 200, { count: await countUnread() });
+  return send(res, 200, { count: await countUnread(req.uid) });
 }
 
 async function saveStaffPrefs(req, res) {
@@ -519,6 +553,7 @@ async function addRoutes({ router, middleware, helpers }) {
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions', publicMw, submit);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/submissions', staffMw, list);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/submissions/:id', staffMw, detail);
+  routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/read', staffWriteMw, markSubmissionRead);
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/submissions/:id', staffWriteMw, update);
   routeHelpers.setupApiRoute(router, 'delete', '/contact-inbox/submissions/:id', staffWriteMw, remove);
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/delete', staffWriteMw, remove);
