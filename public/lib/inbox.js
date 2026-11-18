@@ -46,53 +46,39 @@
     if (navRefreshInProgress) return;
     navRefreshInProgress = true;
     try {
-      let navNode = document.getElementById('contact-inbox-nav') ||
-        document.querySelector('a[href="' + page + '"], a[href$="/plugins/contact-inbox"]');
-      if (navNode && navNode.tagName === 'A') navNode.id = 'contact-inbox-nav';
-      if (!navNode) {
-        // NodeBB exposes the chat icon through its AMD components module.
-        // app.require() is for ES modules; components is an AMD module in 4.x.
-        let chatAnchor = null;
-        try {
-          if (typeof window.require === 'function') {
-            await new Promise(resolve => {
-              window.require(['components'], components => {
-                const chatIcon = components && components.get && components.get('chat/icon');
-                const candidate = chatIcon && chatIcon.length ? chatIcon.closest('a') : null;
-                if (candidate && candidate.length) chatAnchor = candidate[0];
-                resolve();
-              }, resolve);
-            });
-          }
-        } catch (err) {
-          console.warn('[contact-inbox] could not resolve NodeBB chat icon:', err);
+      const route = page;
+      let item = document.getElementById('contact-inbox-nav');
+      let anchor = item && (item.matches('a') ? item : item.querySelector('a'));
+      if (!anchor) {
+        anchor = document.querySelector('a[href="' + route + '"], a[href$="/plugins/contact-inbox"]');
+        if (anchor) {
+          anchor.id = 'contact-inbox-nav';
+          item = anchor;
         }
-        const chatToggle = document.querySelector('[component="chat/dropdown"]');
-        chatAnchor = chatAnchor || (chatToggle && chatToggle.closest('a'));
-        if (!chatAnchor || !chatAnchor.parentElement || !chatAnchor.parentElement.parentNode) return;
-        const listItem = document.createElement('li');
-        listItem.className = chatAnchor.parentElement.className || 'nav-item';
-        navNode = document.createElement('a');
-        navNode.id = 'contact-inbox-nav';
-        navNode.className = chatAnchor.className;
-        navNode.href = page;
-        navNode.title = 'תיבת פניות';
-        navNode.setAttribute('aria-label', 'תיבת פניות');
-        const icon = document.createElement('i');
-        icon.className = 'fa fa-envelope-o';
-        icon.setAttribute('aria-hidden', 'true');
-        navNode.appendChild(icon);
-        listItem.appendChild(navNode);
-        chatAnchor.parentElement.parentNode.insertBefore(listItem, chatAnchor.parentElement);
       }
-      const anchor = navNode.matches('a') ? navNode : navNode.querySelector('a');
+      // The server-side NodeBB navigation item is the source of truth.
+      // Do not make its existence depend on locating the unrelated chat control.
       if (!anchor) return;
-      anchor.href = page;
+      anchor.href = route;
       anchor.title = 'תיבת פניות';
       anchor.setAttribute('aria-label', 'תיבת פניות');
-      const icon = anchor.querySelector('i') || anchor;
-      icon.classList.add('fa', 'fa-envelope-o');
-      icon.classList.remove('fa-envelope');
+      let icon = anchor.querySelector('i.fa-envelope, i.fa-envelope-o, .fa-envelope, .fa-envelope-o');
+      if (!icon) {
+        icon = document.createElement('i');
+        icon.className = 'fa fa-envelope';
+        icon.setAttribute('aria-hidden', 'true');
+        anchor.insertBefore(icon, anchor.firstChild);
+      } else {
+        icon.classList.remove('fa-envelope-o');
+        icon.classList.add('fa', 'fa-envelope');
+      }
+      let badge = anchor.querySelector('.ci-nav-badge');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'ci-nav-badge badge';
+        badge.setAttribute('aria-hidden', 'true');
+        anchor.appendChild(badge);
+      }
       try {
         let count;
         try {
@@ -103,17 +89,14 @@
           count = Number(fallback.newCount);
         }
         count = Number.isFinite(count) && count > 0 ? count : 0;
-        const countText = count > 99 ? '99+' : String(count);
-        icon.classList.toggle('unread-count', count > 0);
-        icon.setAttribute('data-content', countText);
-        anchor.classList.toggle('unread-count', count > 0);
-        anchor.setAttribute('data-content', countText);
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.hidden = count === 0;
         anchor.dataset.contactInboxCount = String(count);
       } catch (err) {
         console.error('[contact-inbox] could not refresh active submission count:', err);
       }
     } catch (err) {
-      console.error('[contact-inbox] could not create inbox navigation icon:', err);
+      console.error('[contact-inbox] could not update inbox navigation icon:', err);
     } finally {
       navRefreshInProgress = false;
     }
