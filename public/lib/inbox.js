@@ -418,7 +418,13 @@
       activeId = id;
       try {
         const result = await request('/submissions/' + encodeURIComponent(id)), item = result.submission;
-        detail.replaceChildren(); detail.append(el('h2', 'ci-subject', item.subject));
+        detail.replaceChildren();
+        // Mirror the card actions in the opened details pane, anchored at its
+        // upper-left corner. The same menu builder keeps actions identical in
+        // the active inbox and history views.
+        detail.style.position = 'relative';
+        detail.style.paddingTop = '48px';
+        detail.append(cardMenu(item), el('h2', 'ci-subject', item.subject));
         detail.append(field('פרטי הפונה', item.name + ' · ' + item.email, 'ci-person'), field('תאריך קבלה', date(item.createdAt)));
         if (item.username) detail.append(field('חשבון בפורום', '@' + item.username));
         detail.append(field('תוכן הפנייה', item.message, 'ci-message-card'));
