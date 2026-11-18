@@ -49,7 +49,8 @@
 
     // The chat control lives in #logged-in-menu, separate from #main-nav.
     // Move the inbox item into that same list immediately before the chat item.
-    const chatItem = document.querySelector('#logged-in-menu > li.chats, #chat_dropdown')?.closest('li');
+    const chatTarget = document.querySelector('#logged-in-menu > li.chats, #chat_dropdown, #chat-list, a[href*="/chats"], a[href*="/chat"], .chats, [component="chat"]');
+    const chatItem = chatTarget && (chatTarget.closest('li') || chatTarget);
     if (chatItem && chatItem.parentNode && navItem.parentNode !== chatItem.parentNode) {
       chatItem.parentNode.insertBefore(navItem, chatItem);
     } else if (chatItem && chatItem.parentNode && navItem.nextSibling !== chatItem) {
@@ -62,7 +63,7 @@
     let badge = anchor.querySelector('.ci-nav-badge');
     if (!badge) {
       badge = document.createElement('span');
-      badge.className = 'ci-nav-badge';
+      badge.className = 'badge badge-notification ci-nav-badge';
       badge.hidden = true;
       anchor.appendChild(badge);
     }
@@ -88,9 +89,13 @@
         return false;
       };
       // NodeBB 4.15 ships the AMD "alerts" module. Use its actual toaster API.
-      if (typeof window.require === 'function') {
-        const alerts = await new Promise((resolve, reject) => window.require(['alerts'], resolve, reject));
-        if (show(alerts)) return;
+      const amdRequire = window.require || window.requirejs || (typeof require === 'function' ? require : null);
+      if (typeof amdRequire === 'function') {
+        const alerts = await new Promise((resolve, reject) => {
+          try { amdRequire(['alerts'], resolve, reject); } catch (err) { reject(err); }
+        });
+        const api = alerts && (alerts.default || alerts);
+        if (show(api)) return;
       }
       if (window.app && typeof window.app.alert === 'function') {
         window.app.alert({ title: type === 'success' ? 'הצלחה' : 'הודעה', message, type: type === 'danger' ? 'danger' : type || 'info', timeout: 5000 });
@@ -296,7 +301,7 @@
             { label: 'מחיקה לצמיתות', className: 'btn-danger', onClick: async (wrap, button) => {
               button.disabled = true;
               try {
-                const result = await request('/submissions/' + encodeURIComponent(id), { method: 'DELETE' });
+                const result = await request('/submissions/' + encodeURIComponent(id) + '/delete', { method: 'POST', body: '{}' });
                 if (!result || result.success !== true || result.deleted !== true || result.id !== id) {
                   throw new Error('השרת לא אישר שהפנייה נמחקה בפועל.');
                 }
