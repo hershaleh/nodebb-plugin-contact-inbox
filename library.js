@@ -8,7 +8,6 @@ const DEFAULTS = Object.freeze({
   allowedGroups: ['administrators'],
   retentionDays: 0,
   maxPerHour: 5,
-  emailReplies: false,
   notifySubmitter: false,
   submitterNotificationDelayMinutes: 5,
   notifyStaffInApp: false,
@@ -317,15 +316,14 @@ async function list(req, res) {
   const q = clean(req.query.q, 120).toLocaleLowerCase();
   const view = clean(req.query.view, 20) || 'active';
   const status = clean(req.query.status, 30);
-  const submissions = items.filter(item => {
+  const activeItems = items.filter(item => view === 'history' ? item.status === 'resolved' : item.status !== 'resolved');
+  const readIds = Number(req.uid) > 0 && activeItems.length ? await db.isSortedSetMembers(PREFIX + 'staff:' + Number(req.uid) + ':read', activeItems.map(item => item.id)) : activeItems.map(() => false);
+  const readState = new Map(activeItems.map((item, index) => [item.id, !!readIds[index]]));
+  const submissions = activeItems.filter(item => {
     const text = [item.name, item.email, item.username, item.subject, item.message].join(' ').toLocaleLowerCase();
-    const inView = view === 'history' ? item.status === 'resolved' : item.status !== 'resolved';
-    return inView && (!q || text.includes(q)) && (!status || status === 'all' || item.status === status);
+    return (status !== 'unread' || !readState.get(item.id)) && (!q || text.includes(q));
   });
-  const readIds = Number(req.uid) > 0 && submissions.length
-    ? await db.isSortedSetMembers(PREFIX + 'staff:' + Number(req.uid) + ':read', submissions.map(item => item.id))
-    : submissions.map(() => false);
-  const submissionsWithReadState = submissions.map((item, index) => ({ ...item, readByMe: !!readIds[index] }));
+  const submissionsWithReadState = submissions.map(item => ({ ...item, readByMe: !!readState.get(item.id) }));
   return send(res, 200, {
     submissions: submissionsWithReadState,
     newCount: await countUnread(req.uid),
@@ -351,6 +349,7 @@ async function update(req, res) {
   item.status = status;
   item.updatedAt = Date.now();
   await db.setObject(key(item.id), item);
+  if (status !== 'resolved' && Number(req.uid) > 0) await db.sortedSetRemove(PREFIX + 'staff:' + Number(req.uid) + ':read', item.id);
   return send(res, 200, { success: true, submission: item });
 }
 
@@ -397,8 +396,8 @@ async function reply(req, res) {
   const cfg = await config();
   const sendEmail = req.body?.sendEmail === true;
   if (sendEmail) {
-    if (!cfg.emailReplies || !mailConfigured()) {
-      return send(res, 409, { error: 'יש להפעיל תחילה שליחת תשובות ולהגדיר SMTP בהגדרות הדוא״ל של NodeBB.' });
+    if (!mailConfigured()) {
+      return send(res, 409, { error: 'שליחת דוא״ל אינה זמינה כרגע. יש להגדיר ולהפעיל SMTP בהגדרות הדוא״ל של NodeBB.' });
     }
     try {
       await emailer.sendToEmail('contact-inbox-reply', item.email, null, {
@@ -462,6 +461,15 @@ async function markSubmissionRead(req, res) {
   return send(res, 200, { success: true, readByMe: true });
 }
 
+async function markSubmissionUnread(req, res) {
+  const item = await get(req.params.id);
+  if (!item || item.deletedAt) return send(res, 404, { error: 'הפנייה לא נמצאה' });
+  const uid = Number(req.uid);
+  if (!Number.isInteger(uid) || uid < 1) return send(res, 403, { error: 'אין הרשאה לסמן פנייה כלא נקראה' });
+  await db.sortedSetRemove(PREFIX + 'staff:' + uid + ':read', item.id);
+  return send(res, 200, { success: true, readByMe: false });
+}
+
 async function unread(req, res) {
   return send(res, 200, { count: await countUnread(req.uid) });
 }
@@ -512,7 +520,6 @@ async function saveSettings(req, res) {
     allowedGroups,
     retentionDays,
     maxPerHour,
-    emailReplies: body.emailReplies === true && mailConfigured(),
     notifySubmitter: body.notifySubmitter === true,
     submitterNotificationDelayMinutes,
     // Keep the former global value only as a migration default for staff
@@ -529,7 +536,7 @@ async function getSettings(req, res) {
 
 async function getCapabilities(req, res) {
   const cfg = await config();
-  return send(res, 200, { emailReplies: !!cfg.emailReplies, smtpConfigured: mailConfigured(), isAdmin: await user.isAdministrator(req.uid) });
+  return send(res, 200, { smtpConfigured: mailConfigured(), isAdmin: await user.isAdministrator(req.uid) });
 }
 
 async function adminPage(req, res) {
@@ -611,6 +618,7 @@ async function addRoutes({ router, middleware, helpers }) {
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/submissions', staffMw, list);
   routeHelpers.setupApiRoute(router, 'get', '/contact-inbox/submissions/:id', staffMw, detail);
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/read', staffWriteMw, markSubmissionRead);
+  routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/unread', staffWriteMw, markSubmissionUnread);
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/submissions/:id', staffWriteMw, update);
   routeHelpers.setupApiRoute(router, 'delete', '/contact-inbox/submissions/:id', staffWriteMw, remove);
   routeHelpers.setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/delete', staffWriteMw, remove);
