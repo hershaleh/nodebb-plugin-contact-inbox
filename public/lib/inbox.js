@@ -134,7 +134,7 @@
       let compactBadge = anchor.querySelector('.ci-nav-count-compact');
       if (!compactBadge) {
         compactBadge = document.createElement('span');
-        compactBadge.className = 'ci-nav-count-compact visible-closed position-absolute top-0 start-100 translate-middle badge rounded-1 bg-primary';
+        compactBadge.className = 'ci-nav-count-compact visible-closed position-absolute badge rounded-1 bg-primary';
         compactBadge.setAttribute('aria-hidden', 'true');
         anchor.appendChild(compactBadge);
       }
