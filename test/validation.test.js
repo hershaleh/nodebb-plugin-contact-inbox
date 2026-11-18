@@ -148,7 +148,7 @@ test('forum navigation uses NodeBB native navigation hook and floating alerts mo
   const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin.json'), 'utf8'));
   assert.ok(manifest.hooks.some(hook => hook.hook === 'filter:navigation.available' && hook.method === 'addNavigation'));
-  assert.ok(server.includes("iconClass: 'fa-envelope'"));
+  assert.ok(server.includes("iconClass: 'fa-envelope-o'"));
   assert.ok(server.includes("id: 'contact-inbox-nav'"));
   assert.ok(client.includes("window.require(['alerts']"));
   assert.ok(client.includes("alerts.success(message, 5000)"));
@@ -167,7 +167,7 @@ test('successful status and retention actions display native success notificatio
 
 test('NodeBB native alerts are loaded through app.require and shown with alerts API', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
-  assert.ok(client.includes("window.app.require('alerts')"));
+  assert.ok(client.includes("window.require(['alerts']"));
   assert.ok(client.includes('alerts.success(message, 5000)'));
   assert.ok(client.includes('alerts.error(message, 10000)'));
 });
@@ -182,8 +182,36 @@ test('plugin ensures its navigation item is enabled in the live NodeBB menu', ()
 test('manual deletion verifies that both the database record and sorted-set index are removed', () => {
   const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
-  assert.ok(server.includes('db.exists(key(item.id))'));
+  assert.ok(server.includes('db.getObject(key(item.id))'));
   assert.ok(server.includes('db.isSortedSetMember(PREFIX + \'submissions\', item.id)'));
   assert.ok(server.includes('deleted: true, id: item.id'));
   assert.ok(client.includes('result.deleted !== true'));
+  assert.ok(server.includes("'/contact-inbox/submissions/:id/delete'"));
+});
+
+
+test('history entries can be returned to the active inbox', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(client.includes('סמן כלא טופל'));
+  assert.ok(client.includes("JSON.stringify({ status: 'new' })"));
+});
+
+test('staff notifications use the account email plus optional additional addresses', () => {
+  const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(server.includes("user.getUserField(Number(uid), 'email')"));
+  assert.ok(server.includes('prefs.extraEmails'));
+  assert.ok(server.includes("'/contact-inbox/groups'"));
+  assert.ok(client.includes("request('/groups')"));
+  assert.ok(client.includes('ci-groups-list'));
+  assert.ok(client.includes('הוספת כתובת דוא״ל נוספת'));
+  assert.ok(!client.includes('התראות דוא״ל לצוות'));
+  assert.ok(!client.includes('כתובת לקבלת התראות'));
+});
+
+test('NodeBB native alerts module is loaded with the AMD require API', () => {
+  const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
+  assert.ok(client.includes("window.require(['alerts']"));
+  assert.ok(client.includes('alerts.success(message, 5000)'));
+  assert.ok(client.includes('alerts.error(message, 10000)'));
 });
