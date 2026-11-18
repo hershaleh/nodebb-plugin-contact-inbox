@@ -71,19 +71,33 @@ async function staffOnly(req, res, next) {
 // guest requests are restricted to the configured forum origin.
 function publicSubmitProtection(middleware) {
   return function (req, res, next) {
-  if (Number(req.uid) > 0) return middleware.applyCSRF(req, res, next);
-  let expectedOrigin = '';
-  let requestOrigin = String(req.headers.origin || '').trim();
-  try { expectedOrigin = new URL(meta.config.url).origin; } catch (err) {
-    return send(res, 403, { error: 'לא ניתן לאמת את מקור שליחת הפנייה. יש לבדוק את כתובת הפורום בהגדרות NodeBB.' });
-  }
-  if (!requestOrigin && req.headers.referer) {
-    try { requestOrigin = new URL(req.headers.referer).origin; } catch (err) { requestOrigin = ''; }
-  }
-  if (!requestOrigin || requestOrigin !== expectedOrigin) {
-    return send(res, 403, { error: 'שליחת פנייה מותרת רק מתוך אתר הפורום.' });
-  }
-  return next();
+    // Logged-in users must pass NodeBB's normal CSRF validation.
+    if (Number(req.uid) > 0) return middleware.applyCSRF(req, res, next);
+
+    const parseOrigin = value => {
+      try {
+        return new URL(String(value || '')).origin;
+      } catch (err) {
+        return '';
+      }
+    };
+
+    // Prefer NodeBB's canonical URL. Some NodeBB runtime configurations do
+    // not expose config.url through meta.config, so fall back to the actual
+    // request host/protocol rather than rejecting every guest submission.
+    const configuredOrigin = parseOrigin(meta && meta.config && meta.config.url);
+    const requestHost = typeof req.get === 'function' ? req.get('host') : req.headers.host;
+    const requestProtocol = req.protocol || (req.secure ? 'https' : 'http');
+    const expectedOrigin = configuredOrigin || parseOrigin(requestProtocol + '://' + requestHost);
+
+    const requestOrigin = parseOrigin(req.headers.origin) || parseOrigin(req.headers.referer);
+    if (!expectedOrigin) {
+      return send(res, 403, { error: 'לא ניתן לאמת את כתובת הפורום בבקשה זו.' });
+    }
+    if (!requestOrigin || requestOrigin !== expectedOrigin) {
+      return send(res, 403, { error: 'שליחת פנייה מותרת רק מתוך אתר הפורום.' });
+    }
+    return next();
   };
 }
 
