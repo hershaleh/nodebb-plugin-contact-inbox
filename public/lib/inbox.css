@@ -79,9 +79,12 @@
 }
 
 
-/* The sidebar is on the physical left edge. Bootstrap's logical start-100
-   flips in RTL, so pin the compact counter to the physical right of the icon. */
+/* Force the compact badge to the screen-facing (physical right) side.
+   Override Bootstrap's RTL logical inset and translate-middle utilities. */
 #contact-inbox-nav .ci-nav-count-compact {
+  inset-inline-start: auto !important;
+  inset-inline-end: auto !important;
   left: 100% !important;
   right: auto !important;
+  transform: translate(50%, -50%) !important;
 }
