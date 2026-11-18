@@ -477,10 +477,16 @@
         const repliesLabel = el('label', 'checkbox', 'אפשר שליחת תשובות בדוא״ל'); const repliesInput = el('input'); repliesInput.type = 'checkbox'; repliesInput.checked = !!settings.emailReplies; repliesLabel.prepend(repliesInput);
         const retentionLabel = el('label', '', 'מחיקה אוטומטית של פניות מההיסטוריה לאחר (ימים; 0 = ללא מחיקה אוטומטית)');
         const retentionInput = el('input', 'form-control'); retentionInput.type = 'number'; retentionInput.min = '0'; retentionInput.max = '3650'; retentionInput.value = settings.retentionDays || 0;
+        const submitterNotifyLabel = el('label', 'checkbox', 'שליחת התראת אישור למשתמש רשום לאחר שליחת פנייה');
+        const submitterNotifyInput = el('input'); submitterNotifyInput.type = 'checkbox'; submitterNotifyInput.checked = !!settings.notifySubmitter; submitterNotifyLabel.prepend(submitterNotifyInput);
+        const submitterDelayLabel = el('label', '', 'השהיה לפני שליחת ההתראה (בדקות)');
+        const submitterDelayInput = el('input', 'form-control'); submitterDelayInput.type = 'number'; submitterDelayInput.min = '1'; submitterDelayInput.max = '10080'; submitterDelayInput.step = '1'; submitterDelayInput.value = settings.submitterNotificationDelayMinutes || 5;
         form.append(el('h3', '', 'הגדרות מנהל'), groupsLabel, groupsWrap, rateLabel, rateInput, repliesLabel, retentionLabel, retentionInput,
+          el('h4', '', 'התראת אישור לפונה'), submitterNotifyLabel, submitterDelayLabel, submitterDelayInput,
+          el('p', 'text-muted', 'ההתראה תופיע בדף ההתראות הרגיל של המשתמש, לאחר ההשהיה שנקבעה. אורחים לא יקבלו התראה זו.'),
           el('p', 'text-muted', settings.smtpConfigured ? 'SMTP וכתובת השולח מוגדרים.' : 'SMTP או כתובת השולח אינם מוגדרים; שליחת תשובות לא תהיה זמינה.'));
         form.dataset.adminSettings = '1';
-        form._adminFields = { groupsWrap, rateInput, repliesInput, retentionInput };
+        form._adminFields = { groupsWrap, rateInput, repliesInput, retentionInput, submitterNotifyInput, submitterDelayInput };
       }
       const prefs = el('section', 'ci-personal-prefs');
       prefs.append(el('h3', '', 'העדפות התראות אישיות'));
@@ -511,7 +517,9 @@
             await request('/settings', { method: 'PUT', body: JSON.stringify({
               allowedGroups: Array.from(f.groupsWrap.querySelectorAll('input:checked')).map(input => input.value),
               maxPerHour: Number(f.rateInput.value), retentionDays: Number(f.retentionInput.value) || 0,
-              emailReplies: f.repliesInput.checked
+              emailReplies: f.repliesInput.checked,
+              notifySubmitter: f.submitterNotifyInput.checked,
+              submitterNotificationDelayMinutes: Number(f.submitterDelayInput.value) || 5
             }) });
           }
           await notify('ההגדרות נשמרו.', 'success');
