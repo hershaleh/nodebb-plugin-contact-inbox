@@ -48,38 +48,24 @@
     try {
       let navNode = document.getElementById('contact-inbox-nav');
       if (!navNode) {
-        let chatAnchor = null;
-        try {
-          if (window.app && typeof window.app.require === 'function') {
-            const components = await window.app.require('components');
-            const chatIcon = components && components.get && components.get('chat/icon');
-            if (chatIcon && chatIcon.length) {
-              const candidate = chatIcon.closest('a');
-              if (candidate && candidate.length) chatAnchor = candidate[0];
-            }
-          }
-        } catch (err) {
-          console.warn('[contact-inbox] could not resolve NodeBB chat icon component:', err);
-        }
-        chatAnchor = chatAnchor ||
-          document.querySelector('[component="chat/dropdown"]')?.closest('a') ||
-          document.querySelector('a[href*="/chats"], a[href*="/chat"]');
-        if (!chatAnchor || !chatAnchor.parentNode) return;
-        navNode = chatAnchor.cloneNode(false);
+        // Fallback for themes that do not render the server-configured menu item.
+        const chatToggle = document.querySelector('[component="chat/dropdown"]');
+        const chatAnchor = chatToggle && chatToggle.closest('a');
+        if (!chatAnchor || !chatAnchor.parentElement || !chatAnchor.parentElement.parentNode) return;
+        const listItem = document.createElement('li');
+        listItem.className = chatAnchor.parentElement.className || 'nav-item';
+        navNode = document.createElement('a');
         navNode.id = 'contact-inbox-nav';
+        navNode.className = chatAnchor.className;
         navNode.href = page;
-        navNode.removeAttribute('data-bs-toggle');
-        navNode.removeAttribute('data-toggle');
-        navNode.removeAttribute('aria-expanded');
-        navNode.removeAttribute('aria-controls');
         navNode.title = 'תיבת פניות';
         navNode.setAttribute('aria-label', 'תיבת פניות');
-        navNode.replaceChildren();
         const icon = document.createElement('i');
         icon.className = 'fa fa-envelope-o';
         icon.setAttribute('aria-hidden', 'true');
         navNode.appendChild(icon);
-        chatAnchor.parentNode.insertBefore(navNode, chatAnchor);
+        listItem.appendChild(navNode);
+        chatAnchor.parentElement.parentNode.insertBefore(listItem, chatAnchor.parentElement);
       }
       const anchor = navNode.matches('a') ? navNode : navNode.querySelector('a');
       if (!anchor) return;
@@ -131,6 +117,37 @@
   }
 
   function modal(title, bodyNode, buttons) {
+    // NodeBB 4.x bundles Bootbox. Use its Bootstrap-backed dialog instead
+    // of a native browser confirm or a hand-built modal with mismatched CSS.
+    if (window.bootbox && typeof window.bootbox.dialog === 'function' && $) {
+      let dialog;
+      const dialogButtons = {};
+      (buttons || []).forEach((spec, index) => {
+        dialogButtons['ci_button_' + index] = {
+          label: spec.label,
+          className: spec.className || 'btn-default',
+          callback: function () {
+            const wrap = dialog && dialog[0];
+            const button = wrap && wrap.querySelectorAll('.modal-footer button')[index];
+            if (spec.onClick) {
+              Promise.resolve(spec.onClick(wrap, button)).catch(err => notify(err.message || 'הפעולה נכשלה.', 'danger'));
+              return false;
+            }
+            return true;
+          },
+        };
+      });
+      dialog = window.bootbox.dialog({
+        title: title,
+        message: $(bodyNode),
+        buttons: dialogButtons,
+        onEscape: true,
+        backdrop: true,
+        centerVertical: true,
+        className: 'ci-modal',
+      });
+      return { element: dialog && dialog[0], close: () => dialog && dialog.modal('hide') };
+    }
     const wrap = document.createElement('div');
     wrap.className = 'modal fade ci-modal';
     wrap.tabIndex = -1;
