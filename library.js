@@ -351,6 +351,31 @@ async function init({ router }) {
   emailer = require.main.require('./src/emailer');
   routeHelpers = require.main.require('./src/routes/helpers');
 
+  // filter:navigation.available only exposes choices in ACP; it does not
+  // activate an item in the live header. Persist the plugin link in the
+  // enabled navigation list so NodeBB renders it for staff.
+  const navigationAdmin = require.main.require('./src/navigation/admin');
+  const navigationItems = await navigationAdmin.get();
+  let inboxNavigation = navigationItems.find(item => item.route === '/plugins/contact-inbox');
+  const isNewNavigationItem = !inboxNavigation;
+  const allowedGroups = (await config()).allowedGroups.map(name =>
+    name === 'administrators' ? 'administrators' : String(name).toLowerCase().replace(/\\s+/g, '-')
+  );
+  if (isNewNavigationItem) {
+    inboxNavigation = { enabled: true };
+    navigationItems.push(inboxNavigation);
+  }
+  Object.assign(inboxNavigation, {
+    route: '/plugins/contact-inbox',
+    id: 'contact-inbox-nav',
+    title: 'תיבת פניות',
+    iconClass: 'fa-envelope-o',
+    textClass: 'd-lg-none',
+    text: 'תיבת פניות',
+    groups: allowedGroups,
+  });
+  await navigationAdmin.save(navigationItems);
+
   if (retentionTimer) clearInterval(retentionTimer);
   const runRetention = () => all().catch(err => console.error('[contact-inbox] retention cleanup failed:', err.message));
   void runRetention();
@@ -388,31 +413,22 @@ async function addRoutes({ router, middleware, helpers }) {
   routeHelpers.setupApiRoute(router, 'put', '/contact-inbox/settings', [staffOnly, middleware.applyCSRF], saveSettings);
 }
 
-async function addHeaderNavigation(hookData) {
-  const templateData = hookData && (hookData.templateData || hookData.templateValues);
-  const req = hookData && hookData.req;
-  if (!templateData || !Array.isArray(templateData.navigation) || !req || !(await hasAccess(req.uid))) {
-    return hookData;
-  }
-
-  const relativePath = String(templateData.relative_path || '');
-  const route = relativePath + '/plugins/contact-inbox';
-  if (!templateData.navigation.some(item => item && (item.route === route || item.route === '/plugins/contact-inbox'))) {
-    const item = {
-      id: 'contact-inbox-nav',
+async function addNavigation(items) {
+  if (!Array.isArray(items)) return items;
+  const route = '/plugins/contact-inbox';
+  if (!items.some(item => item && item.route === route)) {
+    items.push({
+      id: 'contact-inbox',
       route,
       title: 'תיבת פניות',
-      iconClass: 'fa-envelope',
+      enabled: true,
+      iconClass: 'fa-envelope-o',
       textClass: 'd-lg-none',
       text: 'תיבת פניות',
-    };
-    const chatIndex = templateData.navigation.findIndex(nav => nav && /chat|message/i.test(String(nav.route || '') + ' ' + String(nav.id || '')));
-    templateData.navigation.splice(chatIndex >= 0 ? chatIndex : templateData.navigation.length, 0, item);
+      groups: ['administrators'],
+    });
   }
-
-  hookData.templateData = templateData;
-  hookData.templateValues = templateData;
-  return hookData;
+  return items;
 }
 
 async function addAdminNavigation(header) {
@@ -426,6 +442,6 @@ module.exports = {
   init,
   addRoutes,
   addAdminNavigation,
-  addHeaderNavigation,
+  addNavigation,
   _test: { clean, validEmail },
 };
