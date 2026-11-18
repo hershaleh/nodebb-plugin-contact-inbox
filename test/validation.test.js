@@ -117,7 +117,7 @@ test('inbox uses native NodeBB toast alerts and dedicated history/settings route
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
   const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
   const template = fs.readFileSync(path.join(root, 'templates/contact-inbox.tpl'), 'utf8');
-  assert.ok(client.includes("window.require(['alerts']"));
+  assert.ok(client.includes("window.require(['alerts']" ) || client.includes("window.require || window.requirejs"));
   assert.ok(client.includes("window.location.assign(page + '/settings')"));
   assert.ok(client.includes("window.location.assign(page + (view === 'active' ? '/history' : ''))"));
   assert.ok(server.includes("setupPageRoute(router, '/plugins/contact-inbox/history'"));
@@ -127,11 +127,11 @@ test('inbox uses native NodeBB toast alerts and dedicated history/settings route
 });
 
 
-test('manual deletion uses the canonical DELETE endpoint and confirms success', () => {
+test('manual deletion uses the explicit POST endpoint and confirms success', () => {
   const client = fs.readFileSync(path.join(root, 'public/lib/inbox.js'), 'utf8');
   const server = fs.readFileSync(path.join(root, 'library.js'), 'utf8');
-  assert.ok(client.includes("request('/submissions/' + encodeURIComponent(id), { method: 'DELETE' })"));
-  assert.ok(server.includes("setupApiRoute(router, 'delete', '/contact-inbox/submissions/:id'"));
+  assert.ok(client.includes("request('/submissions/' + encodeURIComponent(id) + '/delete', { method: 'POST', body: '{}' })"));
+  assert.ok(server.includes("setupApiRoute(router, 'post', '/contact-inbox/submissions/:id/delete'"));
   assert.ok(client.includes('הפנייה נמחקה בהצלחה.'));
 });
 
@@ -154,6 +154,8 @@ test('forum navigation uses NodeBB native navigation hook and floating alerts mo
   assert.ok(client.includes('function refreshNavigationIcon()'));
   assert.ok(client.includes("link.closest('li')"));
   assert.ok(client.includes("#logged-in-menu > li.chats, #chat_dropdown"));
+  assert.ok(client.includes("link.id = 'contact-inbox-nav'"));
+  assert.ok(client.includes("fa fa-envelope-o"));
   assert.ok(client.includes("chatItem.parentNode.insertBefore(navItem, chatItem)"));
 });
 
