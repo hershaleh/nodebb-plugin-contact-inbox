@@ -20,7 +20,9 @@ const validEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const id = () => crypto.randomBytes(16).toString('hex');
 const key = submissionId => PREFIX + 'submission:' + submissionId;
 function mailConfigured() {
-  return Number(meta.config['email:smtpTransport:enabled']) === 1 && validEmail(meta.config['email:from'] || '');
+  // NodeBB's emailer supplies a default From address when email:from is empty.
+  // Reuse the same enabled transport used for registration and password-reset emails.
+  return Number(meta.config['email:smtpTransport:enabled']) === 1 && !!emailer && typeof emailer.sendToEmail === 'function';
 }
 
 const send = (res, status, data) => {
