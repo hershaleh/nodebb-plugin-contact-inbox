@@ -370,7 +370,12 @@
     }
     function cardMenu(item) {
       const wrap = el('div', 'ci-card-menu'), trigger = el('button', 'ci-menu-trigger', '⋮'), menu = el('div', 'ci-menu');
-      trigger.type = 'button'; trigger.setAttribute('aria-label', 'פעולות לפנייה'); trigger.setAttribute('aria-haspopup', 'true'); trigger.setAttribute('aria-expanded', 'false');
+      // Inline positioning and visibility make the control appear even if the
+      // theme overrides plugin SCSS or its compiled stylesheet is stale.
+      wrap.style.cssText = 'position:absolute!important;top:6px!important;left:6px!important;z-index:30!important;display:block!important;visibility:visible!important;opacity:1!important;direction:rtl!important;';
+      trigger.type = 'button';
+      trigger.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;width:34px!important;height:34px!important;padding:0!important;margin:0!important;border:1px solid var(--bs-border-color,#ccc)!important;border-radius:6px!important;background:var(--bs-body-bg,#fff)!important;color:var(--bs-body-color,#222)!important;font-size:25px!important;line-height:1!important;cursor:pointer!important;visibility:visible!important;opacity:1!important;';
+      trigger.setAttribute('aria-label', 'פעולות לפנייה'); trigger.setAttribute('aria-haspopup', 'true'); trigger.setAttribute('aria-expanded', 'false');
       menu.hidden = true;
       trigger.addEventListener('click', event => {
         event.stopPropagation(); const opening = menu.hidden;
@@ -398,10 +403,12 @@
         const card = el('article', 'ci-row' + (item.id === activeId ? ' active' : '') + (view === 'active' && !item.readByMe ? ' ci-row-unread' : ''));
         card.tabIndex = 0; card.setAttribute('role', 'button'); card.setAttribute('aria-label', 'פתיחת פנייה: ' + item.subject);
         const top = el('div', 'ci-row-top'); top.append(el('strong', '', item.subject), el('small', '', date(item.createdAt)));
+        // Add the menu first so it remains at the upper-left corner even
+        // when the theme applies unexpected layout rules to card children.
+        card.append(cardMenu(item));
         card.append(top, el('div', 'ci-row-meta', item.name + ' · ' + item.email), el('p', 'ci-row-preview', item.message));
         if (view === 'history') card.append(el('span', 'label label-default', 'טופלה'));
         else card.append(el('span', 'ci-read-state' + (item.readByMe ? '' : ' ci-unread-state'), item.readByMe ? 'נקראה' : 'לא נקראה'));
-        card.append(cardMenu(item));
         card.addEventListener('click', event => { if (!event.target.closest('.ci-card-menu')) openItem(item.id); });
         card.addEventListener('keydown', event => { if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('.ci-card-menu')) { event.preventDefault(); openItem(item.id); } });
         list.append(card);
