@@ -48,9 +48,25 @@
     try {
       let navNode = document.getElementById('contact-inbox-nav');
       if (!navNode) {
-        // Fallback for themes that do not render the server-configured menu item.
+        // NodeBB exposes the chat icon through its AMD components module.
+        // app.require() is for ES modules; components is an AMD module in 4.x.
+        let chatAnchor = null;
+        try {
+          if (typeof window.require === 'function') {
+            await new Promise(resolve => {
+              window.require(['components'], components => {
+                const chatIcon = components && components.get && components.get('chat/icon');
+                const candidate = chatIcon && chatIcon.length ? chatIcon.closest('a') : null;
+                if (candidate && candidate.length) chatAnchor = candidate[0];
+                resolve();
+              }, resolve);
+            });
+          }
+        } catch (err) {
+          console.warn('[contact-inbox] could not resolve NodeBB chat icon:', err);
+        }
         const chatToggle = document.querySelector('[component="chat/dropdown"]');
-        const chatAnchor = chatToggle && chatToggle.closest('a');
+        chatAnchor = chatAnchor || (chatToggle && chatToggle.closest('a'));
         if (!chatAnchor || !chatAnchor.parentElement || !chatAnchor.parentElement.parentNode) return;
         const listItem = document.createElement('li');
         listItem.className = chatAnchor.parentElement.className || 'nav-item';
